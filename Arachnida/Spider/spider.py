@@ -14,7 +14,7 @@ def get_imgs(url):
 
     for img in imgs:
         img_url = img.attrs.get('src')
-        if not img_url.startswith('http'):
+        if img_url and (not img_url.startswith('http')):
             img_url = urljoin(url, img_url)
         imgs_url.append(img_url)
     
@@ -34,9 +34,7 @@ def download_imgs(imgs_url, path):
                 filename = f"{path}/image_{i}.{extension}"
                 with open(filename, 'wb') as file:
                     file.write(response.content)
-                print(f"Download OK: {filename}")
-            else:
-                print(f"Download KO: {path}/image_{i}:{extension}")
+                print(f"Downloaded: {filename}")
 
         except Exception as e:
             print(f"Error while downloading {url}: {str(e)}")
@@ -52,11 +50,15 @@ def create_web(url, path, level_max, depth):
         download_imgs(imgs_url, path)
     
         soup = BeautifulSoup(response.text, "lxml")
-        for url in soup.find_all('a', href=True):
-            url_link = url['href']
-            if not url_link.startswith(('http:', 'https:')):
-                url_link = urljoin(url, url_link)
-            create_web(url_link, "{path}/{depth}_{i}", level_max, depth + 1)
+        i = 0
+        for link in soup.find_all('a', href=True):
+            i += 1
+            link_url = link['href']
+            link_href = link.get('href')
+            if link_href and (not link_url.startswith(('http:', 'https:'))):
+                link_url = urljoin(url, link_url)
+    
+            create_web(link_url, f"{path}/level{depth + 1}.{i}", level_max, depth + 1)
     
 
 def parse_arguments():
@@ -69,6 +71,9 @@ def parse_arguments():
 
 
 def main():
+    with open('./spider.txt', 'r') as fichier:
+        contenu = fichier.read()
+        print(contenu)
     args = parse_arguments()
     url = args.URL
     path = args.path
