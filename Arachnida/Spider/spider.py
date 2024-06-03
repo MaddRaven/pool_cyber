@@ -79,6 +79,7 @@ def main():
     path = args.path
     level_max = args.level
 
+    print("=== STARTING DOWNLOAD ===")
     if args.recursive:
         create_web(url, path, level_max, 0)
     else:
@@ -86,6 +87,8 @@ def main():
         if response.status_code == 200:
             imgs_url = get_imgs(url)
             download_imgs(imgs_url, path)
+    
+    print("=== DOWNLOAD COMPLETE ===")
 
 
 if __name__ == "__main__":

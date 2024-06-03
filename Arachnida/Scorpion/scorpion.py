@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 def main():
-    return
+    with open('./scorpion.txt', 'r') as fichier:
+        contenu = fichier.read()
+        print(contenu)
 
 if __name__ == "__main__":
     main()
