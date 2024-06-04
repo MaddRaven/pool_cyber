@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-from PIL import Image
+from PIL import Image, ExifTags
 
 def get_exif_data(image_path):
     print(f"Reading EXIF metadata of {image_path}")
@@ -19,8 +19,20 @@ def get_exif_data(image_path):
         return None
 
 
+def get_creation_date(exif_data):
+    if exif_data is not None:
+        for tag_id in exif_data.keys():
+            tag = ExifTags.TAGS.get(tag_id, tag_id)
+            if tag == 'DateTimeOriginal':
+                print(f"Creation date : {exif_data[tag_id]}")
+                break
+        else:
+            print("No creation date found")
+
+
 def print_exif(data):
     print(data)
+
 
 def main():
     if len(sys.argv) < 2:
@@ -36,11 +48,12 @@ def main():
             image = Image.open(image_path)
             print(f"\n===\nImage: {image_path}")
             data = get_exif_data(image_path)
+            get_creation_date(data)
             print("EXIF metadata:")
             print_exif(data)
             print("===")
         except IOError:
-            print(f"Image {image_path} can't be opened")
+            print(f"\nImage {image_path} can't be opened")
 
 
 if __name__ == "__main__":
