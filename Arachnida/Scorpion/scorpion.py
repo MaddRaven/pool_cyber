@@ -3,17 +3,24 @@
 import sys
 from PIL import Image
 
-
 def get_exif_data(image_path):
     print(f"Reading EXIF metadata of {image_path}")
     try:
-            img = Image.open(image_path)
+        img = Image.open(image_path)
+        if hasattr(img, '_getexif'):
             exif_data = img._getexif()
-            return exif_data
+            if exif_data is not None:
+                return exif_data
+        else:
+            print(f"The image format {image_path} does not support EXIF data.")
+            return None
     except IOError as e:
         print(f"Error during the reading of {image_path}: {e}")
-        return {}
+        return None
 
+
+def print_exif(data):
+    print(data)
 
 def main():
     if len(sys.argv) < 2:
@@ -27,9 +34,11 @@ def main():
     for image_path in sys.argv[1:]:
         try:
             image = Image.open(image_path)
-            print(f"\nImage: {image_path}")
-            tags = get_exif_data(image_path)
+            print(f"\n===\nImage: {image_path}")
+            data = get_exif_data(image_path)
             print("EXIF metadata:")
+            print_exif(data)
+            print("===")
         except IOError:
             print(f"Image {image_path} can't be opened")
 
