@@ -3,6 +3,7 @@
 import sys
 from PIL import Image, ExifTags
 
+
 def get_exif_data(image_path):
     print(f"Reading EXIF metadata of {image_path}")
     try:
@@ -30,8 +31,42 @@ def get_creation_date(exif_data):
             print("No creation date found")
 
 
-def print_exif(data):
-    print(data)
+def set_exif_data(image_path, new_exif_data, save_path):
+    print(f"Setting EXIF metadata of {image_path}")
+    try:
+        img = Image.open(image_path)
+        if hasattr(img, '_setexif'):
+            img.info['Exif'] = new_exif_data
+            img.save(save_path)
+            print("Metadata successfully modified.")
+        else:
+            print("The image format does not support setting EXIF data.")
+    except IOError as e:
+        print(f"Error during the modification of {image_path}: {e}")
+
+
+def delete_exif_data(image_path, save_path=None):
+    print(f"Deleting EXIF metadata of {image_path}")
+    try:
+        img = Image.open(image_path)
+        if hasattr(img, '_getexif'):
+            img.info.pop('Exif', None)
+            if save_path:
+                img.save(save_path)
+            else:
+                img.save(image_path)
+            print("EXIF metadata deleted.")
+        else:
+            print("The image format does not support EXIF data.")
+    except IOError as e:
+        print(f"Error during the deletion of {image_path}: {e}")
+
+
+def print_data(data):
+    for tag_id, value in data.items():
+        tag = ExifTags.TAGS.get(tag_id, tag_id)
+        print(f"{tag}: {value}")
+
 
 
 def main():
@@ -43,17 +78,36 @@ def main():
         contenu = fichier.read()
         print(contenu)
 
-    for image_path in sys.argv[1:]:
-        try:
-            image = Image.open(image_path)
-            print(f"\n===\nImage: {image_path}")
-            data = get_exif_data(image_path)
-            get_creation_date(data)
-            print("EXIF metadata:")
-            print_exif(data)
-            print("===")
-        except IOError:
-            print(f"\nImage {image_path} can't be opened")
+    action = None
+    for i, arg in enumerate(sys.argv):
+        if arg.startswith('-m') or arg.startswith('--modify'):
+            action = 'modify'
+            if i + 1 < len(sys.argv):
+                target_image = sys.argv[i + 1]
+                set_exif_data(target_image, {}, "modified_image.jpg")
+                break
+        elif arg.startswith('-d') or arg.startswith('--delete'):
+            action = 'delete'
+            if i + 1 < len(sys.argv):
+                target_image = sys.argv[i + 1]
+                delete_exif_data(target_image, "deleted_image.jpg")
+                break
+
+    if action is None:
+        for image_path in sys.argv[1:]:
+            try:
+                image = Image.open(image_path)
+                print(f"\n===\nImage: {image_path}")
+                data = get_exif_data(image_path)
+                if data:
+                    print("\nEXIF metadata:")
+                    get_creation_date(data)
+                    print_data(data)
+                else:
+                    print("No EXIF metadata found.")
+                print("===")
+            except IOError:
+                print(f"\nImage {image_path} can't be opened")
 
 
 if __name__ == "__main__":
