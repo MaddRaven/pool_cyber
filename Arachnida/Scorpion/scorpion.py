@@ -31,16 +31,32 @@ def get_creation_date(exif_data):
             print("No creation date found")
 
 
-def set_exif_data(image_path, new_exif_data, save_path):
-    print(f"Setting EXIF metadata of {image_path}")
+def set_exif_data(image_path, save_path, exif_file_path="exif_data.txt"):
+    print(f"Setting EXIF metadata of {image_path} based on {exif_file_path}")
     try:
         img = Image.open(image_path)
-        if hasattr(img, '_setexif'):
-            img.info['Exif'] = new_exif_data
-            img.save(save_path)
+        if hasattr(img, '_getexif'):
+            exif_data = img._getexif()
+
+            with open(exif_file_path, 'r') as exif_file:
+                lines = exif_file.readlines()
+
+            new_exif_data = get_exif_data(image_path)
+
+            for line in lines:
+                key_value = line.strip().split(':')
+                if len(key_value) == 2:
+                    key, value = key_value
+                    new_exif_data[int(key)] = value
+
+            exif_data = dict(exif_data)
+            exif_data.update(new_exif_data)
+            print(new_exif_data)
+
+            img.save(save_path, exif=exif_data)
             print("Metadata successfully modified.")
         else:
-            print("The image format does not support setting EXIF data.")
+            print("The image format does not support EXIF data.")
     except IOError as e:
         print(f"Error during the modification of {image_path}: {e}")
 
@@ -68,7 +84,6 @@ def print_data(data):
         print(f"{tag}: {value}")
 
 
-
 def main():
     if len(sys.argv) < 2:
         print("Wrong number of arguments")
@@ -84,7 +99,7 @@ def main():
             action = 'modify'
             if i + 1 < len(sys.argv):
                 target_image = sys.argv[i + 1]
-                set_exif_data(target_image, {}, "modified_image.jpg")
+                set_exif_data(target_image, 'modified_image.jpg', 'exif_data.txt')
                 break
         elif arg.startswith('-d') or arg.startswith('--delete'):
             action = 'delete'
