@@ -43,15 +43,21 @@ def set_exif_data(image_path, save_path, exif_file_path="exif_data.txt"):
 
             new_exif_data = get_exif_data(image_path)
 
+
+            if new_exif_data is None:
+                new_exif_data = {}
+
             for line in lines:
                 key_value = line.strip().split(':')
                 if len(key_value) == 2:
                     key, value = key_value
                     new_exif_data[int(key)] = value
 
+            if exif_data == None:
+                exif_data = {}
+                
             exif_data = dict(exif_data)
             exif_data.update(new_exif_data)
-            print(new_exif_data)
 
             img.save(save_path, exif=exif_data)
             print("Metadata successfully modified.")
