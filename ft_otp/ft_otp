@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse, re, time, math, hmac, binascii, base64
+import argparse, re, time, math, hmac, binascii, base64, pyotp, os, hashlib
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
@@ -65,25 +65,33 @@ def parse_file(file):
         print(f"File {file} can't be opened")
 
 
+def test(file):
+    key = file.encode('utf-8')
+    salt = os.urandom(16)
+    key_hash = hashlib.sha256(salt + key).digest()
+    mac = hmac.new(key_hash, salt, hashlib.sha256).digest()
+    return base64.b64encode(salt + mac + key).decode('utf-8')
+
 def OTP_generator(file):
     try:
         with open(file, 'rb') as f:
             content = f.read()
-            currentTime = math.floor(time.time() / 30)
 
-            decrypted_key_bytes = binascii.unhexlify(decrypt_key(content))
-            if not isinstance(decrypted_key_bytes, bytes):
-                raise ValueError("Decrypted key bytes must be a bytes-like object")
+        decoded_content = content.decode('utf-8') if isinstance(content, bytes) else content
+        bytes_key = bytes.fromhex(decoded_content)
+        totp = pyotp.TOTP(bytes_key)
+        print("OTP CIBLE:", totp.now())
 
-            currentTimeBytes = str(currentTime).encode()
+        currentTime = math.floor(time.time() / 30)
+        currentTimeBytes = str(currentTime).encode()
 
-            hashed = hmac.new(decrypted_key_bytes, currentTimeBytes, sha1)
-            hashed_hex = base64.b64encode(hashed.digest()).hex()
-            print(hashed_hex)
-            print(len(hashed_hex))
+        hashed = hmac.new(bytes_key, currentTimeBytes, sha1)
+        hashed_hex = base64.b64encode(hashed.digest()).hex()
+        print(hashed_hex)
+        print(len(hashed_hex))
 
-            otp = int(hashed_hex, 16) % (pow(10, 6))
-            print(otp)
+        otp = int(hashed_hex, 16) % (pow(10, 6))
+        print("OTP GENERE:", otp)
     except FileNotFoundError:
         print(f"File {file} can't be opened")
 
