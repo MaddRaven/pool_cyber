@@ -99,6 +99,7 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
+
     if not args.file:
         print("Usage: ./ft_otp [OPTION] [FILE]")
     elif args.get_key is not True and args.key_use is not True:
