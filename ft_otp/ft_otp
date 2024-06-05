@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse, re, time, hmac, pyotp, hashlib, struct, os, base64
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
 from hashlib import sha1
 
 
@@ -13,27 +11,29 @@ ENCRYPTION_KEY_LENGTH = 32
 OTP_DIGITS = 6
 
 
-def encrypt_key(file):
-	key = file.encode('utf-8')
-	salt = os.urandom(16)
-	key_hash = hashlib.sha256(salt + key).digest()
-	mac = hmac.new(key_hash, salt, hashlib.sha256).digest()
-	return base64.b64encode(salt + mac + key).decode('utf-8')
+def encrypt_key(content):
+    key = content.encode('utf-8')
+    salt = os.urandom(16)
+    key_hash = hashlib.sha256(salt + key).digest()
+    mac = hmac.new(key_hash, salt, hashlib.sha256).digest()
+    return base64.b64encode(salt + mac + key).decode('utf-8')
 
 
-""" def decrypt_key(encrypted_key):
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=ENCRYPTION_KEY_LENGTH,
-        salt=SALT,
-        iterations=ITERATIONS,
-        backend=default_backend()
-    )
-    encrypted_key_bytes = encrypted_key.encode('utf-8') if isinstance(encrypted_key, str) else encrypted_key
-    derived_key = kdf.derive(encrypted_key_bytes)
-    derived_key_hex = derived_key.hex()
-    return derived_key_hex
- """
+def decrypt_key(encrypted_key):
+    encrypted_bytes = base64.b64decode(encrypted_key)
+
+    salt = encrypted_bytes[:16]
+    mac = encrypted_bytes[16:48]
+    key = encrypted_bytes[48:]
+
+    key_hash = hashlib.sha256(salt + key).digest()
+    calculated_mac = hmac.new(key_hash, salt, hashlib.sha256).digest()
+
+    if calculated_mac != mac:
+        raise ValueError("Decryption failed: Integrity check failed")
+
+    return(key.decode('utf-8'))
+
 
 def check_hexa(content):
     pattern = r'^\A(?:[0-9A-Fa-f]{2}\s?)+\Z'
@@ -52,7 +52,7 @@ def parse_file(file):
         with open(file, 'r') as f:
             content = f.read().strip()
             if check_hexa(content) is True:
-                return encrypt_key(file)
+                return encrypt_key(content)
             else:
                 return None
     except FileNotFoundError:
@@ -77,12 +77,11 @@ def OTP_generator(file):
         with open(file, 'rb') as f:
             content = f.read()
 
-        decoded_content = content.decode('utf-8') if isinstance(content, bytes) else content
-        bytes_key = bytes.fromhex(decoded_content)
-        totp = pyotp.TOTP(bytes_key)
+        key = decrypt_key(content)
+        totp = pyotp.TOTP(base64.b32encode(key.encode()))
         print("OTP CIBLE:", totp.now())
 
-        otp = ft_generate(decoded_content)
+        otp = ft_generate(key)
         print("OTP GENERE:", otp)
 
     except FileNotFoundError:
