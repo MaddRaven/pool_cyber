@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse, re, time, math, hmac, binascii, base64, pyotp, os, hashlib
+import argparse, re, time, hmac, pyotp, hashlib, struct
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
@@ -65,12 +65,18 @@ def parse_file(file):
         print(f"File {file} can't be opened")
 
 
-def test(file):
-    key = file.encode('utf-8')
-    salt = os.urandom(16)
-    key_hash = hashlib.sha256(salt + key).digest()
-    mac = hmac.new(key_hash, salt, hashlib.sha256).digest()
-    return base64.b64encode(salt + mac + key).decode('utf-8')
+def ft_generate(key):
+	now = int(time.time())
+	alive = 30
+	time_step = now // alive
+	time_bytes = struct.pack('>Q', time_step)
+	key_bytes = key.encode('utf-8')
+	hmac_code = hmac.new(key_bytes, time_bytes,hashlib.sha1).digest()
+	offset = hmac_code[-1] & 0x0F
+	otp_unpack = struct.unpack('>I', hmac_code[offset:offset+4])[0] & 0x7FFFFFFF
+	otp = str(otp_unpack % 1000000).zfill(6)
+	return otp
+
 
 def OTP_generator(file):
     try:
@@ -82,16 +88,9 @@ def OTP_generator(file):
         totp = pyotp.TOTP(bytes_key)
         print("OTP CIBLE:", totp.now())
 
-        currentTime = math.floor(time.time() / 30)
-        currentTimeBytes = str(currentTime).encode()
-
-        hashed = hmac.new(bytes_key, currentTimeBytes, sha1)
-        hashed_hex = base64.b64encode(hashed.digest()).hex()
-        print(hashed_hex)
-        print(len(hashed_hex))
-
-        otp = int(hashed_hex, 16) % (pow(10, 6))
+        otp = ft_generate(decoded_content)
         print("OTP GENERE:", otp)
+
     except FileNotFoundError:
         print(f"File {file} can't be opened")
 
