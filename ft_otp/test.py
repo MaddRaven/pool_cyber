@@ -24,8 +24,6 @@ def main():
 		encrypt = ft_open(1, arg.k).strip()
 	otp = ft_generate(encrypt)
 	totp = ft_totp(encrypt)
-	img = ft_qr(otp)
-	img.show()
 #	imgcat(img.tobytes())
 	print("OTP: ", otp)
 	print("TOTP: ",totp)
