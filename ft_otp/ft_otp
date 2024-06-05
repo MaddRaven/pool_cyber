@@ -15,7 +15,6 @@ OTP_DIGITS = 6
 
 
 def encrypt_key(key):
-    print(key)
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=ENCRYPTION_KEY_LENGTH,
