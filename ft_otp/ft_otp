@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-import argparse, re
+import argparse, re, time, math, hmac, binascii, base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
+from hashlib import sha1
 
 
 KEY_FILE = "ft_otp.key"
@@ -14,6 +15,7 @@ OTP_DIGITS = 6
 
 
 def encrypt_key(key):
+    print(key)
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=ENCRYPTION_KEY_LENGTH,
@@ -26,15 +28,29 @@ def encrypt_key(key):
     return encrypted_key
 
 
+def decrypt_key(encrypted_key):
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=ENCRYPTION_KEY_LENGTH,
+        salt=SALT,
+        iterations=ITERATIONS,
+        backend=default_backend()
+    )
+    encrypted_key_bytes = encrypted_key.encode('utf-8') if isinstance(encrypted_key, str) else encrypted_key
+    derived_key = kdf.derive(encrypted_key_bytes)
+    derived_key_hex = derived_key.hex()
+    return derived_key_hex
+
+
 def check_hexa(content):
     pattern = r'^\A(?:[0-9A-Fa-f]{2}\s?)+\Z'
     match = re.match(pattern, content)
     key_len = len(content)
 
-    if match and key_len > 64:
+    if match and key_len == 64:
         return True
     else:
-        print("Error: Key must be at least 64 hexadecimal characters")
+        print("Error: Key must be 64 hexadecimal characters")
         return False
 
 
@@ -51,6 +67,26 @@ def parse_file(file):
 
 
 def OTP_generator(file):
+    try:
+        with open(file, 'rb') as f:
+            content = f.read()
+            currentTime = math.floor(time.time() / 30)
+
+            decrypted_key_bytes = binascii.unhexlify(decrypt_key(content))
+            if not isinstance(decrypted_key_bytes, bytes):
+                raise ValueError("Decrypted key bytes must be a bytes-like object")
+
+            currentTimeBytes = str(currentTime).encode()
+
+            hashed = hmac.new(decrypted_key_bytes, currentTimeBytes, sha1)
+            hashed_hex = base64.b64encode(hashed.digest()).hex()
+            print(hashed_hex)
+            print(len(hashed_hex))
+
+            otp = int(hashed_hex, 16) % (pow(10, 6))
+            print(otp)
+    except FileNotFoundError:
+        print(f"File {file} can't be opened")
 
 
 def parse_arguments():
@@ -77,8 +113,8 @@ def main():
                     file.write(encrypt_key)
                     print("Key was successfully saved in ft_otp.key")
 
-            if args.key_use is True:
-                OTP_generator(KEY_FILE)
+                if args.key_use is True:
+                    OTP_generator(KEY_FILE)
 
         elif args.key_use is True:
             OTP_generator(args.file)
