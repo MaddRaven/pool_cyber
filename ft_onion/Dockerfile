@@ -8,7 +8,7 @@ RUN chown debian-tor:debian-tor /var/lib/tor/hidden_service/ && \
     chmod 700 /var/lib/tor/hidden_service/ && \
     chmod 644 /etc/tor/torrc
 
-COPY nginx.conf /etc/nginx/sites-available/default
+COPY nginx.conf /etc/nginx/conf.d/
 COPY --chown=nginx:nginx index.html /usr/share/nginx/html/
 COPY sshd_config /etc/ssh/sshd_config
 COPY torrc /etc/tor/torrc
