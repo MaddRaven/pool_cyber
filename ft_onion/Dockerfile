@@ -7,6 +7,7 @@ RUN apt-get update && \
 COPY nginx.conf /etc/nginx/sites-available/default
 COPY index.html /var/www/html/
 COPY sshd_config /etc/ssh/sshd_config
+COPY torrc /etc/tor/torrc
 
 EXPOSE 80 4242
 
