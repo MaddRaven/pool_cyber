@@ -6,7 +6,7 @@
 #    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/04/22 11:25:01 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/06 09:45:51 by ffaivre          ###   ########.fr        #
+#    Updated: 2024/06/06 13:48:46 by ffaivre          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -23,7 +23,7 @@ build:
 	docker build -t $(NAME) .
 
 run:
-	docker run --privileged -d --name $(IMG) -p 1025:80 -p 4243:4242 $(NAME)
+	docker run -d --name $(IMG) -p 1025:80 -p 4243:4242 $(NAME)
 
 exec:
 	docker exec -it $(IMG) bash
