@@ -1,15 +1,14 @@
-FROM debian:bullseye
+FROM ubuntu:latest
 
 RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y nginx tor openssh-server
+    apt-get install -y nginx openssh-server tor && \
+    mkdir -p /var/www/html /var/run/sshd /var/lib/tor/hidden_service/
 
-COPY nginx.conf /etc/nginx/conf.d/
+COPY nginx.conf /etc/nginx/sites-available/default
+COPY index.html /var/www/html/
+COPY sshd_config /etc/ssh/sshd_config
 
-COPY index.html /usr/share/nginx/html/
+EXPOSE 80 4242
 
-RUN mkdir /var/run/sshd
-RUN echo 'root:root' | chpasswd
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-EXPOSE 22
-CMD ["/usr/sbin/sshd", "-D"]
+CMD ["/usr/sbin/tor", "-f", "/etc/tor/torrc"] & \
+    /usr/sbin/sshd -D -e -p 4242
