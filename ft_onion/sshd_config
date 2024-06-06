@@ -1,4 +1,4 @@
-Port 4242
+Port 4343
 PermitRootLogin yes
 PasswordAuthentication no
 PubkeyAuthentication yes
