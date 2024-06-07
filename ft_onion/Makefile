@@ -6,7 +6,7 @@
 #    By: MadRaven <MadRaven@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/04/22 11:25:01 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/06 19:06:42 by MadRaven         ###   ########.fr        #
+#    Updated: 2024/06/07 11:22:37 by MadRaven         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -34,7 +34,12 @@ delete:
 	docker rmi $(shell docker images -aq) || true
 	docker system prune -af
 
-re: delete all
+rm:
+	docker stop $(shell docker ps -aq) || true
+	docker rm $(shell docker ps -aq) || true
+	docker rmi $(shell docker images -aq) || true
+
+re: rm all
 
 git:
 	@$(PRINTF) "$(_RED)\nAdding GIT...$(_WHITE)\n"
@@ -43,7 +48,7 @@ git:
 	git push
 
 
-.PHONY: all build run git exec delete re
+.PHONY: all build run git exec delete re rm
 
 
 # Colors

@@ -13,6 +13,9 @@ COPY torrc /etc/tor/torrc
 RUN chown -R debian-tor:debian-tor /var/lib/tor /var/log/tor
 RUN chmod 700 /var/lib/tor/hidden_service
 
+COPY id_rsa.pub /root/.ssh/authorized_keys
+RUN chmod 600 /root/.ssh/authorized_keys
+
 EXPOSE 8080 4343
 
 CMD /bin/bash -c "service tor start && service ssh start && service nginx start && tail -f /dev/null"
