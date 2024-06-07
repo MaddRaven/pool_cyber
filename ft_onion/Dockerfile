@@ -17,4 +17,4 @@ EXPOSE 80 4343
 
 USER debian-tor
 
-CMD service tor start && service ssh start && service nginx start
+CMD /bin/bash -c "usr/sbin/tor -f /etc/tor/torrc && /usr/sbin/sshd -D -e -p 4343 && service nginx start"
