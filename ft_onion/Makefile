@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: MadRaven <MadRaven@student.42.fr>          +#+  +:+       +#+         #
+#    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/04/22 11:25:01 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/07 11:22:37 by MadRaven         ###   ########.fr        #
+#    Updated: 2024/06/07 12:22:51 by ffaivre          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -20,6 +20,7 @@ IMG 	:= onion
 all: build run exec
 
 build:
+	cp ~/.ssh/id_rsa.pub .
 	docker build -t $(NAME) .
 
 run:
@@ -41,6 +42,9 @@ rm:
 
 re: rm all
 
+ssh:
+	ssh -i ~/.ssh/id_rsa root@localhost -p 4343
+
 git:
 	@$(PRINTF) "$(_RED)\nAdding GIT...$(_WHITE)\n"
 	git add .
@@ -48,7 +52,7 @@ git:
 	git push
 
 
-.PHONY: all build run git exec delete re rm
+.PHONY: all build run git exec delete re rm ssh
 
 
 # Colors
