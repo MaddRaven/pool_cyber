@@ -12,9 +12,10 @@ COPY nginx.conf /etc/nginx/
 COPY --chown=nginx:nginx index.html /usr/share/nginx/html/
 COPY sshd_config /etc/ssh/sshd_config
 COPY torrc /etc/tor/torrc
+COPY entrypoint.sh /entrypoint.sh
 
 EXPOSE 80 4343
 
 USER debian-tor
 
-CMD /bin/bash -c "usr/sbin/tor -f /etc/tor/torrc && /usr/sbin/sshd -D -e -p 4343 && service nginx start"
+CMD ["/entrypoint.sh"]
