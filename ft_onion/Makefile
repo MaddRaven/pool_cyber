@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
+#    By: MadRaven <MadRaven@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/04/22 11:25:01 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/06 14:20:10 by ffaivre          ###   ########.fr        #
+#    Updated: 2024/06/06 19:06:42 by MadRaven         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -26,7 +26,7 @@ run:
 	docker run -d --name $(IMG) -p 4343:4343 $(NAME)
 
 exec:
-	docker exec -it $(IMG) bash
+	docker exec -u 0 -it $(IMG) bash
 
 delete:
 	docker stop $(shell docker ps -aq) || true
