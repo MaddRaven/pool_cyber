@@ -6,7 +6,7 @@
 #    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/06/10 11:40:52 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/10 16:28:55 by ffaivre          ###   ########.fr        #
+#    Updated: 2024/06/10 16:47:51 by ffaivre          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -22,8 +22,7 @@ encrypt:
 decrypt:
 	@echo "Please enter a key:"
 	@read key; \
-	key_formatted=$(shell echo $$key); \
-	@./stockholm -r $$key_formatted
+	./stockholm -r "$$key"
 
 help:
 	@./stockholm -h
@@ -36,8 +35,8 @@ encrypt-silent:
 
 decrypt-silent:
 	@echo "Please enter a key:"
-	@read key;
-	@./stockholm -rs
+	@read key; \
+	./stockholm -s -r "$$key"
 
 .PHONY: all encrypt decrypt help version encrypt-silent decrypt-silent
 
