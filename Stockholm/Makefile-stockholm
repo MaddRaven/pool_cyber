@@ -1,0 +1,54 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile-stockholm                                 :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2024/06/10 11:40:52 by ffaivre           #+#    #+#              #
+#    Updated: 2024/06/10 16:28:55 by ffaivre          ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
+
+PRINTF = LC_NUMERIC="en_US.UTF-8" printfSCRIPT=./stockholm
+
+
+all: encrypt
+
+encrypt:
+	 @./stockholm
+
+decrypt:
+	@echo "Please enter a key:"
+	@read key; \
+	key_formatted=$(shell echo $$key); \
+	@./stockholm -r $$key_formatted
+
+help:
+	@./stockholm -h
+
+version:
+	@./stockholm -v
+
+encrypt-silent:
+	@./stockholm -s
+
+decrypt-silent:
+	@echo "Please enter a key:"
+	@read key;
+	@./stockholm -rs
+
+.PHONY: all encrypt decrypt help version encrypt-silent decrypt-silent
+
+
+# Colors
+_GREY		= \033[38m
+_RED		= \033[91m
+_GREEN		= \033[92m
+_YELLOW		= \033[33m
+_BLUE		= \033[34m
+_PURPLE		= \033[35m
+_CYAN		= \033[36m
+_WHITE		= \033[37m
+_MAGENTA 	= \033[95m

