@@ -33,6 +33,15 @@ After starting the simulator, you can interact with it through the command line 
 - To see available commands and options, use the -h flag for help.
 - To see the version of the project use the -v flag.
 
+You can also use make commands in the Docker:
+
+- Use `make` to simulate an encryption attack.
+    - Use `make encrypt-silent` for silent operation, suppressing output messages.
+- Use `make decrypt` to decrypt files.
+    - Use `make decrypt-silent` for silent operation, suppressing output messages.
+- Use `make help` to see available commands and options.
+- Use `make version` to see the version of the project.
+
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for details.
