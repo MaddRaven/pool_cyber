@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
 
+import argparse, sys, socket
+
+
+def check_ipv4(ip):
+    try:
+        socket.inet_pton(socket.AF_INET, ip)
+        return True
+    except OSError:
+        return False
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser("Inquisitor")
-    parser.add_argument('', help="URL targeted")
-    parser.add_argument('URL', help="URL targeted")
-    parser.add_argument('URL', help="URL targeted")
-    parser.add_argument('URL', help="URL targeted")
+    parser.add_argument('IP_src', help="IP address of the source")
+    parser.add_argument('MAC_src', help="MAC address of the source")
+    parser.add_argument('IP_target', help="IP address of the target")
+    parser.add_argument('MAC_target', help="MAC address of the target")
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
+    
+    if not check_ipv4(args.IP_src) or not check_ipv4(args.IP_target):
+        print("IP addresses must be IPv4 addresses")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

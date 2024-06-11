@@ -7,7 +7,7 @@ ENV VIRTUAL_ENV=/var/www/html/myapp
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN $VIRTUAL_ENV/bin/pip install 
+RUN $VIRTUAL_ENV/bin/pip install argparse pylibpcap
 
 COPY inquisitor .
 COPY Makefile-inquisitor ./Makefile
