@@ -1,12 +1,12 @@
 # **************************************************************************** #
 #                                                                              #
 #                                                         :::      ::::::::    #
-#    Makefile-stockholm                                 :+:      :+:    :+:    #
+#    Makefile-inquisitor                                :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
 #    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/06/10 11:40:52 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/11 15:20:44 by ffaivre          ###   ########.fr        #
+#    Updated: 2024/06/11 15:19:32 by ffaivre          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -14,31 +14,10 @@
 PRINTF = LC_NUMERIC="en_US.UTF-8" printfSCRIPT=./stockholm
 
 
-all: encrypt
+all: 
 
-encrypt:
-	 @./stockholm
 
-decrypt:
-	@echo "Please enter a key:"
-	@read key; \
-	./stockholm -r "$$key"
-
-help:
-	@./stockholm -h
-
-version:
-	@./stockholm -v
-
-encrypt-silent:
-	@./stockholm -s
-
-decrypt-silent:
-	@echo "Please enter a key:"
-	@read key; \
-	./stockholm -s -r "$$key"
-
-.PHONY: all encrypt decrypt help version encrypt-silent decrypt-silent
+.PHONY: all 
 
 
 # Colors
