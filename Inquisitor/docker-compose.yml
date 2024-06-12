@@ -14,7 +14,7 @@ services:
       ftpnet:
         ipv4_address: $SERVER_IP
     volumes:
-      - ./ftp-server:/home/abc 
+      - ./ftp-server:/home/ffaivre
   attacker-ftp:
     container_name: attacker
     build:
