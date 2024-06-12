@@ -1,57 +1,38 @@
 version: '3.8'
 
 services:
-  server-ftp:
-    container_name: server-ftp
-    build:
-      context: ./
-      dockerfile: ./server.Dockerfile
-    mac_address: $SERVER_MAC
-    environment:
-      - FTP_USER=$FTP_USER
-      - FTP_PASSWORD=$FTP_PASSWORD
-    networks:
-      ftpnet:
-        ipv4_address: $SERVER_IP
+  inquisitor:
+    build: .
+    image: inquisitor
+    container_name: inquisitor
     volumes:
-      - ./ftp-server:/home/ffaivre
-  attacker-ftp:
-    container_name: attacker
-    build:
-      context: ./
-      dockerfile: ./attacker.Dockerfile
-    environment:
-      - IP_SRC=$SERVER_IP
-      - MAC_SRC=$SERVER_MAC
-      - IP_TARGET=$CLIENT_IP
-      - MAC_TARGET=$CLIENT_MAC
-    init: true
+      - ./inquisitor:/app/inquisitor
     networks:
-      ftpnet:
-        ipv4_address: $ATTACKER_IP
-    mac_address: $ATTACKER_MAC
-    depends_on:
-      - server-ftp
-      - client-ftp
-  client-ftp:
-    container_name: client-ftp
-    build:
-      context: ./
-      dockerfile: ./client.Dockerfile
-    mac_address: $CLIENT_MAC
+      - inquisitor
+
+
+  server:
+    image: delfer/alpine-ftp-server
+    container_name: server
     ports:
-      - 3000:3000
-    networks:
-      ftpnet:
-        ipv4_address: $CLIENT_IP
+      - "21000-21010:21000-21010"
+    environment:
+      - USERS=one|Qwertyuiop1234
     volumes:
-      - ./ftp-client:/config
-    depends_on:
-      - server-ftp
+      - ./one:/ftp/one
+    networks:
+      - inquisitor
+
+  client:
+    image: jlesage/filezilla
+    container_name: client
+    ports:
+      - "5800:5800"
+    volumes:
+      - ./storage:/storage:rw
+    networks:
+      - inquisitor
+
 
 networks:
-  ftpnet:
-    ipam:
-      driver: default
-      config:
-        - subnet: $SUBNET_RANGE
+  inquisitor:

