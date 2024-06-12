@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 
 
-import sys, socket, argparse
+import sys, socket, argparse, re
 from scapy.all import ARP, Ether, srp, sniff, sendp, conf
+
+
+def validate_ipv4(address):
+    pattern = re.compile(r"^(?:(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
+    return bool(pattern.match(address))
 
 
 def restore_arp_tables(interface):
@@ -46,6 +51,9 @@ def main():
     args = ft_parser_args()
     try:
         ip_src, mac_src, ip_target, mac_target = args.addresses
+        if not validate_ipv4(ip_src) or not validate_ipv4(ip_target):
+            print("Invalid IP address format. Please use IPv4 addresses.")
+            exit(1)
         arp_poison(ip_src, mac_src, ip_target, mac_target)
     except ValueError:
         print("Invalid IP address format. Please use IPv4 addresses.")

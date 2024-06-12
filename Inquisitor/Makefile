@@ -6,7 +6,7 @@
 #    By: ffaivre <ffaivre@student.42.fr>            +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/04/22 11:25:01 by ffaivre           #+#    #+#              #
-#    Updated: 2024/06/11 15:03:05 by ffaivre          ###   ########.fr        #
+#    Updated: 2024/06/12 15:32:35 by ffaivre          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -17,16 +17,22 @@ NAME	:= inquisitor
 
 IMG 	:= inquisitor_img
 
-all: build run exec
+all: down build
 
 build:
-	docker build -t $(NAME) .
+	docker compose up --build
 
-run:
-	docker run -d --name $(IMG) $(NAME)
+down:
+	docker compose down
 
-exec:
-	docker exec -u 0 -it $(IMG) bash
+inquisitor: show
+	docker exec -it inquisitor bash
+
+server:
+	docker exec -it server sh
+
+client:
+	docker exec -it client sh
 
 delete:
 	docker stop $(shell docker ps -aq) || true
@@ -48,7 +54,19 @@ git:
 	git push
 
 
-.PHONY: all build run git exec delete re rm
+SERVER	:= server
+CLIENT	:= client
+
+IP_SV := $(shell docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(SERVER))
+MAC_SV := $(shell docker inspect --format='{{range .NetworkSettings.Networks}}{{.MacAddress}}{{end}}' $(SERVER))
+IP_CL := $(shell docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(CLIENT))
+MAC_CL := $(shell docker inspect --format='{{range .NetworkSettings.Networks}}{{.MacAddress}}{{end}}' $(CLIENT))
+
+show:
+	@echo "Use: "
+	@echo ./inquisitor $(IP_SV) $(MAC_SV) $(IP_CL) $(MAC_CL)
+
+.PHONY: all build run git exec delete re rm down inquisitor server client
 
 
 # Colors
