@@ -1,13 +1,15 @@
 FROM ubuntu:latest
 
+WORKDIR /inquisitor
+
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip python3-venv python-libpcap
+    apt-get install -y  python3-dev libpcap-dev libnet-dev -y
 
-ENV VIRTUAL_ENV=/var/www/html/myapp
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
-RUN $VIRTUAL_ENV/bin/pip install argparse
+RUN pip3 install --upgrade pip
+RUN pip3 install scapy
+RUN pip3 install argparse
+RUN pip3 install pcapy
+RUN pip3 install getmac
 
 COPY inquisitor .
 COPY Makefile-inquisitor ./Makefile
