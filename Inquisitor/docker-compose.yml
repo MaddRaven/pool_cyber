@@ -17,9 +17,9 @@ services:
     ports:
       - "21000-21010:21000-21010"
     environment:
-      - USERS=one|Qwertyuiop1234
+      - USERS=test|777
     volumes:
-      - ./one:/ftp/one
+      - ./test:/ftp/test
     networks:
       - inquisitor
 
