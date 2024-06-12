@@ -17,7 +17,7 @@ services:
     ports:
       - "21000-21010:21000-21010"
     environment:
-      - USERS=test|777777777
+      - USERS=test|zxcvbnM777
     volumes:
       - ./test:/ftp/test
     networks:
