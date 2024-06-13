@@ -83,7 +83,9 @@ def main():
         if not validate_mac(mac_src) or not validate_mac(mac_target):
             print("Invalid MAC address format")
             exit(1)
+        print("Valid IP addresses entered.")
         arp_poison(ip_src, mac_src, ip_target, mac_target)
+        print("ARP Poisoning completed successfully.")
     except ValueError:
         print("Invalid IP address format")
     except Exception as e:
