@@ -2,6 +2,7 @@
 
 import argparse, requests, re, os, sys, difflib, time
 from urllib.parse import urljoin
+from bs4 import BeautifulSoup
 
 
 def get_form(form):
@@ -24,22 +25,25 @@ def detect_database(url, type):
     payloads = ["'", "\"", "`", "\\", "/*'*/", ")'"]
     
     try:
-        parse = bs(s.get(url).content, "html.parser")
-        forms =  parse.find_all("form")
-        for payload in payloads:
-            target_url = urljoin(url, details["action"])
-            data = {}
-            for input_tag in details["inputs"]:
-                if input_tag["type"] == "text" or input_tag["type"] == "search":
-                    data[input_tag["name"]] = payload
+        s = requests.Session()
+        parse = BeautifulSoup(s.get(url).content, "html.parser")
+        forms = parse.find_all("form")
+        for form in forms:
+            details = get_form(form)
+            for payload in payloads:
+                target_url = urljoin(url, details["action"])
+                data = {}
+                for input_tag in details["inputs"]:
+                    if input_tag["type"] == "text" or input_tag["type"] == "search":
+                        data[input_tag["name"]] = payload
+                    else:
+                        data[input_tag["name"]] = "test"
+                if type == "POST":
+                    response = requests.post(target_url, data=data)
                 else:
-                    data[input_tag["name"]] = "test"
-            if type == "POST":
-                response = requests.post(target_url, data=data)
-            else:
-                response =  requests.get(target_url, params=data)
+                    response =  requests.get(target_url, params=data)
 
-        print(response)
+                print(response)
         
     except requests.exceptions.RequestException as e:
         print(f"Error during database detection: {e}")
