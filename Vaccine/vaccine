@@ -37,7 +37,7 @@ def detect_database(url):
         mysql_error_pattern = "You have an error in your SQL syntax"
         postgresql_error_pattern = "ERROR: syntax error at or near"
         
-        print(response.text)
+        print(response)
 
         if mysql_error_pattern in response.text:
             return "MySQL"
