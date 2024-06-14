@@ -1,40 +1,65 @@
 #!/usr/bin/python3
 
 import argparse, requests, re, os, sys, difflib, time
+from urllib.parse import urljoin
 
 
-def test1(url, db_engine, payload):
+def get_form(form):
+    details = {
+        "action": form.attrs.get("action", "").lower(),
+        "method": form.attrs.get("method", "get").lower()
+    }
+    inputs = [
+        {"type": input_tag.attrs.get("type", "text"), 
+         "name": input_tag.attrs.get("name"),
+         "value": input_tag.attrs.get("value", "")}
+        for input_tag in form.find_all("input")
+    ]
+    details["inputs"] = inputs
+    
+    return details
+
+
+def detect_database(url, type):
+    payloads = ["'", "\"", "`", "\\", "/*'*/", ")'"]
+    
     try:
-        response = requests.get(url, params={"query": payload})
-        if db_engine == "MySQL" and "MySQL error" in response.text:
-            return True
-        elif db_engine == "PostgreSQL" and "PostgreSQL error" in response.text:
-            return True
-    except requests.exceptions.RequestException:
-        pass
-    return False
+        parse = bs(s.get(url).content, "html.parser")
+        forms =  parse.find_all("form")
+        for payload in payloads:
+            target_url = urljoin(url, details["action"])
+            data = {}
+            for input_tag in details["inputs"]:
+                if input_tag["type"] == "text" or input_tag["type"] == "search":
+                    data[input_tag["name"]] = payload
+                else:
+                    data[input_tag["name"]] = "test"
+            if type == "POST":
+                response = requests.post(target_url, data=data)
+            else:
+                response =  requests.get(target_url, params=data)
+
+        print(response)
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error during database detection: {e}")
+        return None
+
+    return None
 
 
-def test2(url, payload):
-    try:
-        start_time = time.time()
-        response = requests.get(url, params={"query": payload})
-        end_time = time.time()
-        if end_time - start_time > 5:
-            return True
-    except requests.exceptions.RequestException:
-        pass
-    return False
-
-
-def vaccine(url, method):
+def vaccine(url, type):
+    db_engine = detect_database(url, type)
+    if not db_engine:
+        print("Database engine detection failed.")
+        return
+    
     try:
         payload = "' UNION SELECT"
-        test1(url, payload)
-        test2(url, payload)
 
     except Exception as e:
         print(f"Error: {str(e)}")
+
 
 
 def validate_args(args):
@@ -50,7 +75,7 @@ def store_results(results, filename):
     with open(filename, 'wb') as file:
         for result in results:
             file.write(result + "\n")
-        print(f"Results writes in {filename}")
+        print(f"Reults writes in {filename}")
 
 
 def parse_arguments():
