@@ -21,9 +21,22 @@ def get_form(form):
     return details
 
 
+def analyze_headers(headers):
+    if 'X-Powered-By' in headers and 'PHP' in headers['X-Powered-By']:
+        return 'MySQL/MariaDB (suggested by PHP)'
+    return None
+
+
+def analyze_content(parse):
+    mysql_keywords = ['mysql', 'mysqli']
+    for keyword in mysql_keywords:
+        if keyword in str(parse):
+            return f'MySQL/MariaDB (detected in content)'
+    return None
+
+
 def detect_database(url, type):
     payloads = ["'", "\"", "`", "\\", "/*'*/", ")'"]
-    
     try:
         s = requests.Session()
         parse = BeautifulSoup(s.get(url).content, "html.parser")
@@ -43,12 +56,19 @@ def detect_database(url, type):
                 else:
                     response =  requests.get(target_url, params=data)
 
-                print(response)
+                db_type = analyze_headers(response.headers)
+                if db_type:
+                    print(f"Detected database type: {db_type}")
+                    return db_type
+                
+                db_type = analyze_content(response.text)
+                if db_type:
+                    print(f"Detected database type: {db_type}")
+                    return db_type
         
     except requests.exceptions.RequestException as e:
         print(f"Error during database detection: {e}")
         return None
-
     return None
 
 
@@ -63,7 +83,6 @@ def vaccine(url, type):
 
     except Exception as e:
         print(f"Error: {str(e)}")
-
 
 
 def validate_args(args):
