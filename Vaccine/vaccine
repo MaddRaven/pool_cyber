@@ -22,16 +22,31 @@ def get_form(form):
 
 
 def analyze_headers(headers):
-    if 'X-Powered-By' in headers and 'PHP' in headers['X-Powered-By']:
-        return 'MySQL/MariaDB (suggested by PHP)'
+    if 'X-Powered-By' in headers and ('PHP' in headers['X-Powered-By'] or 'Apache' in headers['X-Powered-By']):
+        return 'MySQL/MariaDB (suggested by PHP/Apache)'
+    elif 'Server' in headers and 'Oracle' in headers['Server']:
+        return 'Oracle Database'
+    elif 'Server' in headers and 'PostgreSQL' in headers['Server']:
+        return 'PostgreSQL'
+    elif 'SQLite' in headers.get('Server', ''):
+        return 'SQLite'
     return None
 
 
 def analyze_content(parse):
-    mysql_keywords = ['mysql', 'mysqli']
-    for keyword in mysql_keywords:
-        if keyword in str(parse):
-            return f'MySQL/MariaDB (detected in content)'
+    keywords = {
+        'mysql': ['mysql', 'mysqli'],
+        'oracle': ['oracledb', 'oracle', 'sqlplus'],
+        'sqlite': ['sqlite', 'sqllite'],
+        'postgresql': ['postgres', 'postgresql', 'pg'],
+        'mariadb': ['mariadb', 'mysql']
+    }
+    
+    for db_type, db_keywords in keywords.items():
+        for keyword in db_keywords:
+            if keyword.lower() in str(parse).lower():
+                return f'{db_type} (detected in content)'
+    
     return None
 
 
@@ -56,15 +71,16 @@ def detect_database(url, type):
                 else:
                     response =  requests.get(target_url, params=data)
 
+                db_type = analyze_content(response.text)
+                if db_type:
+                    print(f"Detected database type: {db_type}")
+                    return db_type
+
                 db_type = analyze_headers(response.headers)
                 if db_type:
                     print(f"Detected database type: {db_type}")
                     return db_type
                 
-                db_type = analyze_content(response.text)
-                if db_type:
-                    print(f"Detected database type: {db_type}")
-                    return db_type
         
     except requests.exceptions.RequestException as e:
         print(f"Error during database detection: {e}")
