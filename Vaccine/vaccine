@@ -15,56 +15,26 @@ def test1(url, db_engine, payload):
     return False
 
 
-def test2(url, db_engine, payload):
+def test2(url, payload):
     try:
         start_time = time.time()
         response = requests.get(url, params={"query": payload})
         end_time = time.time()
-        if db_engine == "MySQL" and end_time - start_time > 5:
-            return True
-        if db_engine == "PostgreSQL" and end_time - start_time > 5:
+        if end_time - start_time > 5:
             return True
     except requests.exceptions.RequestException:
         pass
     return False
 
 
-def detect_database(url):
-    payload = "' OR 'a'='a"
-    
-    try:
-        response = requests.get(url, params={"query": payload})
-        mysql_error_pattern = "You have an error in your SQL syntax"
-        postgresql_error_pattern = "ERROR: syntax error at or near"
-        
-        print(response)
-
-        if mysql_error_pattern in response.text:
-            return "MySQL"
-        elif postgresql_error_pattern in response.text:
-            return "PostgreSQL"
-        
-    except requests.exceptions.RequestException as e:
-        print(f"Error during database detection: {e}")
-        return None
-
-    return None
-
-
 def vaccine(url, method):
-    db_engine = detect_database(url)
-    if not db_engine:
-        print("Database engine detection failed.")
-        return
-    
     try:
         payload = "' UNION SELECT"
-        test1(url, db_engine, payload)
-        test2(url, db_engine, payload)
+        test1(url, payload)
+        test2(url, payload)
 
     except Exception as e:
         print(f"Error: {str(e)}")
-
 
 
 def validate_args(args):
@@ -80,7 +50,7 @@ def store_results(results, filename):
     with open(filename, 'wb') as file:
         for result in results:
             file.write(result + "\n")
-        print(f"Reults writes in {filename}")
+        print(f"Results writes in {filename}")
 
 
 def parse_arguments():
