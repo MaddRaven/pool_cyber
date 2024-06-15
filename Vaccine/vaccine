@@ -56,7 +56,6 @@ def analyze_content(parse):
         for keyword in db_keywords:
             if keyword.lower() in str(parse).lower():
                 return f'{db_type} (detected in content)'
-    
     return None
 
 
@@ -98,6 +97,20 @@ def detect_database(url, type):
     return None
 
 
+def store_results(results):
+    with open(filename, 'wb') as file:
+        for result in results:
+            file.write(result + "\n")
+        print(f"Results writes in {filename}")
+
+
+def get_details(payload):
+    details = {
+        "payload": payload
+    }
+    store_results(details)
+
+
 def check_risk(response, db, payload):
     keywords = {
         'mysql': ['mysql', 'mysqli'],
@@ -125,6 +138,7 @@ def check_risk(response, db, payload):
         if error.lower() in str(response.text).lower():
             print(f"\033[{Rouge}mRisk detected\033[0m")
             print(f"\033[{Magenta}m\"{payload}\"\n\033[0m")
+            get_details(payload)
             return
     print(f"\033[{Vert}mSafe\n\033[0m")
     return None
@@ -261,13 +275,6 @@ def validate_args(args):
         sys.exit(1)
 
 
-def store_results(results, filename):
-    with open(filename, 'wb') as file:
-        for result in results:
-            file.write(result + "\n")
-        print(f"Results writes in {filename}")
-
-
 def parse_arguments():
     parser = argparse.ArgumentParser("Vaccine programme for testing SQL security")
     parser.add_argument('-o', type=str, default='archive.txt', help="Archive file")
@@ -277,14 +284,13 @@ def parse_arguments():
 
 
 def main():
-    global url
+    global filename
     args = parse_arguments()
     validate_args(args)
     url = args.url
+    filename = args.o
     vaccine(url, args.X)
 
 
 if __name__ == "__main__":
     main()
-
-    
