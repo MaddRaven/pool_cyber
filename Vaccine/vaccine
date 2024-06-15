@@ -98,10 +98,10 @@ def detect_database(url, type):
 
 
 def store_results(results):
-    with open(filename, 'wb') as file:
+    with open(filename, 'a') as file:
+        print(results)
         for result in results:
-            file.write(result + "\n")
-        print(f"Results writes in {filename}")
+            file.write(f'{result}: {results.value()}\n')
 
 
 def get_details(payload):
@@ -133,6 +133,7 @@ def check_risk(response, db, payload):
         if keyword.lower() in str(response.text).lower():
             print(f"\033[{Rouge}mRisk detected\033[0m")
             print(f"\033[{Magenta}m\"{payload}\"\n\033[0m")
+            get_details(payload)
             return
     for error in errors:
         if error.lower() in str(response.text).lower():
@@ -257,8 +258,10 @@ def vaccine(url, type):
     db_engine = detect_database(url, type)
     if not db_engine:
         print(f"\033[{Bleu}mNo risk detected\033[0m")
+    else:
+        with open(filename, 'w') as file:
+            file.write(f'Resultats: \n')
     db = db_engine.split()[0] if db_engine else ""
-    
     try:
         test_flaw(url, type, db)
 
