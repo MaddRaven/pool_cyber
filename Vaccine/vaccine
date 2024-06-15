@@ -3,6 +3,7 @@
 import argparse, requests, re, os, sys, difflib, time
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+import importlib.util
 
 
 def get_form(form):
@@ -38,8 +39,8 @@ def analyze_content(parse):
         'mysql': ['mysql', 'mysqli'],
         'oracle': ['oracledb', 'oracle', 'sqlplus'],
         'sqlite': ['sqlite', 'sqllite'],
-        'postgresql': ['postgres', 'postgresql', 'pg'],
-        'mariadb': ['mariadb', 'mysql']
+        'postgresql': ['postgres', 'postgresql'],
+        'mariadb': ['mariadb']
     }
     
     for db_type, db_keywords in keywords.items():
@@ -88,14 +89,59 @@ def detect_database(url, type):
     return None
 
 
+def check_union(response, db):
+    keywords = {
+        'mysql': ['mysql', 'mysqli'],
+        'oracle': ['oracledb', 'oracle', 'sqlplus'],
+        'sqlite': ['sqlite', 'sqllite'],
+        'postgresql': ['postgres', 'postgresql'],
+        'mariadb': ['mariadb']
+    }
+    if (db):
+        filtered_keywords = [keyword for db_keywords in keywords.values() for keyword in db_keywords if keyword.lower().startswith(db.lower())]
+    else:
+        filtered_keywords = [keyword for db_keywords in keywords.values() for keyword in db_keywords]
+    for keyword in filtered_keywords:
+        if keyword.lower() in str(response.text).lower():
+            print("OK")
+            return
+
+    print("KO")
+    return None
+
+
+def test_flaw(url, type, db):
+    try:
+        s = requests.Session()
+
+        print("===== TEST UNION =====\n")
+        path_to_union = os.path.join(os.path.dirname(__file__), 'union.py')
+        spec = importlib.util.spec_from_file_location("union", path_to_union)
+        union_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(union_module)
+        payloads = union_module.unionPayloads
+        i = 0
+        for payload in payloads:
+            if type == "POST":
+                response = s.post(url, data=payload)
+            else:
+                response = s.get(url, params=payload)
+            i += 1
+            print(f"Test {i}: ",  end='')
+            check_union(response, db)
+                
+    except requests.exceptions.RequestException as e:
+        print(f"Error during vulnerability detection: {e}")
+
+
 def vaccine(url, type):
     db_engine = detect_database(url, type)
     if not db_engine:
-        print("Database engine detection failed.")
-        return
+        print("Database not found")
+    db = db_engine.split()[0] if db_engine else ""
     
     try:
-        payload = "' UNION SELECT"
+        test_flaw(url, type, db)
 
     except Exception as e:
         print(f"Error: {str(e)}")
