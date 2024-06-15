@@ -243,7 +243,6 @@ def vaccine(url, type):
     db_engine = detect_database(url, type)
     if not db_engine:
         print(f"\033[{Bleu}mNo risk detected\033[0m")
-        return
     db = db_engine.split()[0] if db_engine else ""
     
     try:
@@ -266,7 +265,7 @@ def store_results(results, filename):
     with open(filename, 'wb') as file:
         for result in results:
             file.write(result + "\n")
-        print(f"Reults writes in {filename}")
+        print(f"Results writes in {filename}")
 
 
 def parse_arguments():
