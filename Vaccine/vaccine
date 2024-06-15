@@ -6,6 +6,15 @@ from bs4 import BeautifulSoup
 import importlib.util
 
 
+Rouge = 31
+Vert = 32
+Jaune = 33
+Bleu = 34
+Magenta = 35
+Cyan = 36
+Blanc = 37
+
+
 def get_form(form):
     details = {
         "action": form.attrs.get("action", "").lower(),
@@ -74,12 +83,12 @@ def detect_database(url, type):
 
                 db_type = analyze_content(response.text)
                 if db_type:
-                    print(f"Detected database type: {db_type}")
+                    print(f"\033[{Jaune}mDetected database type: {db_type}\033[0m")
                     return db_type
 
                 db_type = analyze_headers(response.headers)
                 if db_type:
-                    print(f"Detected database type: {db_type}")
+                    print(f"\033[{Jaune}mDetected database type: {db_type}\033[0m")
                     return db_type
                 
         
@@ -109,13 +118,15 @@ def check_risk(response, db, payload):
         filtered_keywords = [keyword for db_keywords in keywords.values() for keyword in db_keywords]
     for keyword in filtered_keywords:
         if keyword.lower() in str(response.text).lower():
-            print(f"Risk detected: {payload}")
+            print(f"\033[{Rouge}mRisk detected\033[0m")
+            print(f"\033[{Magenta}m\"{payload}\"\n\033[0m")
             return
     for error in errors:
         if error.lower() in str(response.text).lower():
-            print(f"Risk detected: {payload}")
+            print(f"\033[{Rouge}mRisk detected\033[0m")
+            print(f"\033[{Magenta}m\"{payload}\"\n\033[0m")
             return
-    print("Safe")
+    print(f"\033[{Vert}mSafe\n\033[0m")
     return None
 
 
@@ -126,8 +137,7 @@ def test_flaw(url, type, db):
         forms = parse.find_all("form")
         for form in forms:
             details = get_form(form)
-
-            print("===== TEST UNION =====\n")
+            print(f"\033[{Cyan}m===== TEST UNION =====\n\033[0m")
             path_to_union = os.path.join(os.path.dirname(__file__), 'union.py')
             spec = importlib.util.spec_from_file_location("union", path_to_union)
             union_module = importlib.util.module_from_spec(spec)
@@ -150,7 +160,9 @@ def test_flaw(url, type, db):
                     response =  requests.get(target_url, params=data)
                 check_risk(response, db, payload)
 
-            print("\n===== TEST ERROR =====\n")
+        for form in forms:
+            details = get_form(form)
+            print(f"\033[{Cyan}m\n===== TEST ERROR =====\n\033[0m")
             path_to_error = os.path.join(os.path.dirname(__file__), 'error.py')
             spec = importlib.util.spec_from_file_location("error", path_to_error)
             error_module = importlib.util.module_from_spec(spec)
@@ -158,15 +170,24 @@ def test_flaw(url, type, db):
             payloads = error_module.errorPayloads
             i = 0
             for payload in payloads:
-                if type == "POST":
-                    response = s.post(url, data=payload)
-                else:
-                    response = s.get(url, params=payload)
                 i += 1
                 print(f"Error test {i}/154: ",  end='')
+                target_url = urljoin(url, details["action"])
+                data = {}
+                for input_tag in details["inputs"]:
+                    if input_tag["type"] == "text" or input_tag["type"] == "search":
+                        data[input_tag["name"]] = payload
+                    else:
+                        data[input_tag["name"]] = "test"
+                if type == "POST":
+                    response = requests.post(target_url, data=data)
+                else:
+                    response =  requests.get(target_url, params=data)
                 check_risk(response, db, payload)
 
-            print("\n===== TEST TIME =====\n")
+        for form in forms:
+            details = get_form(form)
+            print(f"\033[{Cyan}m\n===== TEST TIME =====\n\033[0m")
             path_to_time = os.path.join(os.path.dirname(__file__), 'time.py')
             spec = importlib.util.spec_from_file_location("time", path_to_time)
             time_module = importlib.util.module_from_spec(spec)
@@ -174,15 +195,24 @@ def test_flaw(url, type, db):
             payloads = time_module.timePayloads
             i = 0
             for payload in payloads:
-                if type == "POST":
-                    response = s.post(url, data=payload)
-                else:
-                    response = s.get(url, params=payload)
                 i += 1
                 print(f"Time test {i}/92: ",  end='')
+                target_url = urljoin(url, details["action"])
+                data = {}
+                for input_tag in details["inputs"]:
+                    if input_tag["type"] == "text" or input_tag["type"] == "search":
+                        data[input_tag["name"]] = payload
+                    else:
+                        data[input_tag["name"]] = "test"
+                if type == "POST":
+                    response = requests.post(target_url, data=data)
+                else:
+                    response =  requests.get(target_url, params=data)
                 check_risk(response, db, payload)
 
-            print("\n===== BOOL TIME =====\n")
+        for form in forms:
+            details = get_form(form)
+            print(f"\033[{Cyan}m\n===== TEST BOOL =====\n\033[0m")
             path_to_bool = os.path.join(os.path.dirname(__file__), 'bool.py')
             spec = importlib.util.spec_from_file_location("bool", path_to_bool)
             bool_module = importlib.util.module_from_spec(spec)
@@ -190,12 +220,19 @@ def test_flaw(url, type, db):
             payloads = bool_module.boolPayloads
             i = 0
             for payload in payloads:
-                if type == "POST":
-                    response = s.post(url, data=payload)
-                else:
-                    response = s.get(url, params=payload)
                 i += 1
                 print(f"Bool test {i}/77: ",  end='')
+                target_url = urljoin(url, details["action"])
+                data = {}
+                for input_tag in details["inputs"]:
+                    if input_tag["type"] == "text" or input_tag["type"] == "search":
+                        data[input_tag["name"]] = payload
+                    else:
+                        data[input_tag["name"]] = "test"
+                if type == "POST":
+                    response = requests.post(target_url, data=data)
+                else:
+                    response =  requests.get(target_url, params=data)
                 check_risk(response, db, payload)
                 
     except requests.exceptions.RequestException as e:
@@ -205,19 +242,8 @@ def test_flaw(url, type, db):
 def vaccine(url, type):
     db_engine = detect_database(url, type)
     if not db_engine:
-        print("Database not found")
-    db = db_engine.split()[0] if db_engine else ""
-    
-    try:
-        test_flaw(url, type, db)
-    except requests.exceptions.RequestException as e:
-        print(f"Error during vulnerability detection: {e}")
-
-
-def vaccine(url, type):
-    db_engine = detect_database(url, type)
-    if not db_engine:
-        print("Database not found")
+        print(f"\033[{Bleu}mNo risk detected\033[0m")
+        return
     db = db_engine.split()[0] if db_engine else ""
     
     try:
