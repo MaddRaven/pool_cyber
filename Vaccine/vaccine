@@ -122,70 +122,81 @@ def check_risk(response, db, payload):
 def test_flaw(url, type, db):
     try:
         s = requests.Session()
+        parse = BeautifulSoup(s.get(url).content, "html.parser")
+        forms = parse.find_all("form")
+        for form in forms:
+            details = get_form(form)
 
-        print("===== TEST UNION =====\n")
-        path_to_union = os.path.join(os.path.dirname(__file__), 'union.py')
-        spec = importlib.util.spec_from_file_location("union", path_to_union)
-        union_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(union_module)
-        payloads = union_module.unionPayloads
-        i = 0
-        for payload in payloads:
-            if type == "POST":
-                response = s.post(url, data=payload)
-            else:
-                response = s.get(url, params=payload)
-            i += 1
-            print(f"Union test {i}/415: ",  end='')
-            check_risk(response, db, payload)
+            print("===== TEST UNION =====\n")
+            path_to_union = os.path.join(os.path.dirname(__file__), 'union.py')
+            spec = importlib.util.spec_from_file_location("union", path_to_union)
+            union_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(union_module)
+            payloads = union_module.unionPayloads
+            i = 0
+            for payload in payloads:
+                i += 1
+                print(f"Union test {i}/415: ",  end='')
+                target_url = urljoin(url, details["action"])
+                data = {}
+                for input_tag in details["inputs"]:
+                    if input_tag["type"] == "text" or input_tag["type"] == "search":
+                        data[input_tag["name"]] = payload
+                    else:
+                        data[input_tag["name"]] = "test"
+                if type == "POST":
+                    response = requests.post(target_url, data=data)
+                else:
+                    response =  requests.get(target_url, params=data)
+                check_risk(response, db, payload)
 
-        print("\n===== TEST ERROR =====\n")
-        path_to_error = os.path.join(os.path.dirname(__file__), 'error.py')
-        spec = importlib.util.spec_from_file_location("error", path_to_error)
-        error_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(error_module)
-        payloads = error_module.errorPayloads
-        i = 0
-        for payload in payloads:
-            if type == "POST":
-                response = s.post(url, data=payload)
-            else:
-                response = s.get(url, params=payload)
-            i += 1
-            print(f"Error test {i}/154: ",  end='')
-            check_risk(response, db, payload)
-                
-        print("\n===== TEST TIME =====\n")
-        path_to_time = os.path.join(os.path.dirname(__file__), 'time.py')
-        spec = importlib.util.spec_from_file_location("time", path_to_time)
-        time_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(time_module)
-        payloads = time_module.timePayloads
-        i = 0
-        for payload in payloads:
-            if type == "POST":
-                response = s.post(url, data=payload)
-            else:
-                response = s.get(url, params=payload)
-            i += 1
-            print(f"Time test {i}/92: ",  end='')
-            check_risk(response, db, payload)
-                
-        print("\n===== BOOL TIME =====\n")
-        path_to_bool = os.path.join(os.path.dirname(__file__), 'bool.py')
-        spec = importlib.util.spec_from_file_location("bool", path_to_bool)
-        bool_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(bool_module)
-        payloads = bool_module.boolPayloads
-        i = 0
-        for payload in payloads:
-            if type == "POST":
-                response = s.post(url, data=payload)
-            else:
-                response = s.get(url, params=payload)
-            i += 1
-            print(f"Bool test {i}/77: ",  end='')
-            check_risk(response, db, payload)
+            print("\n===== TEST ERROR =====\n")
+            path_to_error = os.path.join(os.path.dirname(__file__), 'error.py')
+            spec = importlib.util.spec_from_file_location("error", path_to_error)
+            error_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(error_module)
+            payloads = error_module.errorPayloads
+            i = 0
+            for payload in payloads:
+                if type == "POST":
+                    response = s.post(url, data=payload)
+                else:
+                    response = s.get(url, params=payload)
+                i += 1
+                print(f"Error test {i}/154: ",  end='')
+                check_risk(response, db, payload)
+
+            print("\n===== TEST TIME =====\n")
+            path_to_time = os.path.join(os.path.dirname(__file__), 'time.py')
+            spec = importlib.util.spec_from_file_location("time", path_to_time)
+            time_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(time_module)
+            payloads = time_module.timePayloads
+            i = 0
+            for payload in payloads:
+                if type == "POST":
+                    response = s.post(url, data=payload)
+                else:
+                    response = s.get(url, params=payload)
+                i += 1
+                print(f"Time test {i}/92: ",  end='')
+                check_risk(response, db, payload)
+
+            print("\n===== BOOL TIME =====\n")
+            path_to_bool = os.path.join(os.path.dirname(__file__), 'bool.py')
+            spec = importlib.util.spec_from_file_location("bool", path_to_bool)
+            bool_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(bool_module)
+            payloads = bool_module.boolPayloads
+            i = 0
+            for payload in payloads:
+                if type == "POST":
+                    response = s.post(url, data=payload)
+                else:
+                    response = s.get(url, params=payload)
+                i += 1
+                print(f"Bool test {i}/77: ",  end='')
+                check_risk(response, db, payload)
                 
     except requests.exceptions.RequestException as e:
         print(f"Error during vulnerability detection: {e}")
