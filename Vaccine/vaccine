@@ -27,7 +27,6 @@ def get_form(form):
         for input_tag in form.find_all("input")
     ]
     details["inputs"] = inputs
-    
     return details
 
 
@@ -45,11 +44,11 @@ def analyze_headers(headers):
 
 def analyze_content(parse):
     keywords = {
+        'mariadb': ['mariadb'],
         'mysql': ['mysql', 'mysqli'],
         'oracle': ['oracledb', 'oracle', 'sqlplus'],
         'sqlite': ['sqlite', 'sqllite'],
-        'postgresql': ['postgres', 'postgresql'],
-        'mariadb': ['mariadb']
+        'postgresql': ['postgres', 'postgresql']
     }
     
     for db_type, db_keywords in keywords.items():
@@ -99,19 +98,26 @@ def detect_database(url, type):
 
 def store_results(results):
     with open(filename, 'a') as file:
-        print(results)
-        for result in results:
-            file.write(f'{result}: {results.value()}\n')
+        for key, value in results.items():
+            if key == 'Payload':
+                file.write(f'   {key}: {value}\n   {{\n')
+            else:
+                file.write(f'       {key}: {value}\n')
+        file.write(f'   }}\n\n')
 
 
-def get_details(payload):
+def get_details(payload, db, details, table_names, columns):
     details = {
-        "payload": payload
+        "Payload": payload,
+        "Database": db,
+        "Vulnerable_parameters": [input_tag["name"] for input_tag in details["inputs"]],
+        "Table names": table_names,
+        "Columns names": columns,
     }
     store_results(details)
 
 
-def check_risk(response, db, payload):
+def check_risk(response, db, payload, details):
     keywords = {
         'mysql': ['mysql', 'mysqli'],
         'oracle': ['oracledb', 'oracle', 'sqlplus'],
@@ -133,13 +139,29 @@ def check_risk(response, db, payload):
         if keyword.lower() in str(response.text).lower():
             print(f"\033[{Rouge}mRisk detected\033[0m")
             print(f"\033[{Magenta}m\"{payload}\"\n\033[0m")
-            get_details(payload)
+            table_names = []
+            table_match = re.findall(r"FROM\s+([^\s]+)", response.text)
+            for table in table_match:
+                if table not in table_names:
+                    table_names.append(table)
+            column_pattern = r'\b(SELECT|FROM)\s*[\w.,]+\s*(?=[,\s])'
+            columns = re.findall(column_pattern, "SELECT * FROM users WHERE id = 1;")
+            unique_columns = set(columns) - {'SELECT', 'FROM'}
+            get_details(payload, db, details, table_names, list(unique_columns))
             return
     for error in errors:
         if error.lower() in str(response.text).lower():
             print(f"\033[{Rouge}mRisk detected\033[0m")
             print(f"\033[{Magenta}m\"{payload}\"\n\033[0m")
-            get_details(payload)
+            table_names = []
+            table_match = re.findall(r"FROM\s+([^\s]+)", response.text)
+            for table in table_match:
+                if table not in table_names:
+                    table_names.append(table)
+            column_pattern = r'\b(SELECT|FROM)\s*[\w.,]+\s*(?=[,\s])'
+            columns = re.findall(column_pattern, "SELECT * FROM users WHERE id = 1;")
+            unique_columns = set(columns) - {'SELECT', 'FROM'}
+            get_details(payload, db, details, table_names, list(unique_columns))
             return
     print(f"\033[{Vert}mSafe\n\033[0m")
     return None
@@ -173,7 +195,7 @@ def test_flaw(url, type, db):
                     response = requests.post(target_url, data=data)
                 else:
                     response =  requests.get(target_url, params=data)
-                check_risk(response, db, payload)
+                check_risk(response, db, payload, details)
 
         for form in forms:
             details = get_form(form)
@@ -198,7 +220,7 @@ def test_flaw(url, type, db):
                     response = requests.post(target_url, data=data)
                 else:
                     response =  requests.get(target_url, params=data)
-                check_risk(response, db, payload)
+                check_risk(response, db, payload, details)
 
         for form in forms:
             details = get_form(form)
@@ -223,7 +245,7 @@ def test_flaw(url, type, db):
                     response = requests.post(target_url, data=data)
                 else:
                     response =  requests.get(target_url, params=data)
-                check_risk(response, db, payload)
+                check_risk(response, db, payload, details)
 
         for form in forms:
             details = get_form(form)
@@ -248,7 +270,7 @@ def test_flaw(url, type, db):
                     response = requests.post(target_url, data=data)
                 else:
                     response =  requests.get(target_url, params=data)
-                check_risk(response, db, payload)
+                check_risk(response, db, payload, details)
                 
     except requests.exceptions.RequestException as e:
         print(f"Error during vulnerability detection: {e}")
@@ -260,7 +282,9 @@ def vaccine(url, type):
         print(f"\033[{Bleu}mNo risk detected\033[0m")
     else:
         with open(filename, 'w') as file:
-            file.write(f'Resultats: \n')
+            file.write(f'URL: {url}\n\n')
+            file.write(f'====== RESULTS ======\n\n')
+            file.write(f'TESTS:\n\n')
     db = db_engine.split()[0] if db_engine else ""
     try:
         test_flaw(url, type, db)
