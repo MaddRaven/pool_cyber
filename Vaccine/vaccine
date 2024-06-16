@@ -81,7 +81,7 @@ def detect_database(url, type):
 
                 db_type = analyze_content(response.text)
                 if db_type:
-                    print(f"\033[{Jaune}mDetected database type: {db_type}\033[0m")
+                    print(f"\033[{Jaune}mDetected database type: {db_type}\n\033[0m")
                     return db_type
 
                 db_type = analyze_headers(response.headers)
@@ -271,6 +271,8 @@ def test_flaw(url, type, db):
                 else:
                     response =  requests.get(target_url, params=data)
                 check_risk(response, db, payload, details)
+            print(f'Vulnerability check done')
+            print(f"\033[{Jaune}m\nResults stored in {filename}\n\033[0m")
                 
     except requests.exceptions.RequestException as e:
         print(f"Error during vulnerability detection: {e}")
@@ -279,7 +281,7 @@ def test_flaw(url, type, db):
 def vaccine(url, type):
     db_engine = detect_database(url, type)
     if not db_engine:
-        print(f"\033[{Bleu}mNo risk detected\033[0m")
+        print(f"\033[{Bleu}mNo risk detected\n\033[0m")
     else:
         with open(filename, 'w') as file:
             file.write(f'URL: {url}\n\n')
