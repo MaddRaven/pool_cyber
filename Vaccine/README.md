@@ -30,4 +30,4 @@ To install the Cybersecurity Piscine Vaccine, follow these steps:
 ## Usage
 
 To use the Cybersecurity Piscine Vaccine, run the following command:
-    - `./vaccine [-X method] [-o file] URL
+    - `./vaccine [-X method] [-o file] URL`
